@@ -30,12 +30,14 @@ export const MEETING_STATUSES = [
 ] as const;
 export type MeetingStatus = (typeof MEETING_STATUSES)[number];
 
-/** Processing steps that can fail; a failed Meeting is retried from this step. */
-export const FAILED_STEPS = ["transcribing", "summarizing"] as const;
-export type FailedStep = (typeof FAILED_STEPS)[number];
+/** The steps `processMeeting` runs, in order. Each can fail; a failed Meeting is retried from that step. */
+export const PROCESSING_STEPS = ["transcribing", "summarizing"] as const;
+export type ProcessingStep = (typeof PROCESSING_STEPS)[number];
+/** What `failed_step` records: the ProcessingStep that broke. */
+export type FailedStep = ProcessingStep;
 
 export const meetingStatusEnum = pgEnum("meeting_status", MEETING_STATUSES);
-export const failedStepEnum = pgEnum("failed_step", FAILED_STEPS);
+export const failedStepEnum = pgEnum("failed_step", PROCESSING_STEPS);
 
 export const meetings = pgTable(
   "meetings",

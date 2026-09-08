@@ -109,7 +109,7 @@ export default async function MeetingPage({
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="action-items">
-              Action items
+              Action Items
               {meeting.status === "ready" && (
                 <span className="text-muted-foreground tabular-nums">
                   {meeting.actionItems.length}
@@ -141,7 +141,14 @@ function TranscriptPanel({ meeting }: { meeting: Meeting }) {
       />
     );
   }
-  if (meeting.status === "failed") return <FailedPanel {...meeting} />;
+  if (meeting.status === "failed") {
+    return (
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
+    );
+  }
   return (
     <ProcessingPanel step="transcribing">
       Utterances appear here as soon as the Transcript is ready.
@@ -158,7 +165,14 @@ function SummaryPanel({ meeting }: { meeting: Meeting }) {
       />
     );
   }
-  if (meeting.status === "failed") return <FailedPanel {...meeting} />;
+  if (meeting.status === "failed") {
+    return (
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
+    );
+  }
   return <SummaryProcessing meeting={meeting} />;
 }
 
@@ -172,7 +186,14 @@ function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
       />
     );
   }
-  if (meeting.status === "failed") return <FailedPanel {...meeting} />;
+  if (meeting.status === "failed") {
+    return (
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
+    );
+  }
   return <SummaryProcessing meeting={meeting} />;
 }
 

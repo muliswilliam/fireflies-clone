@@ -13,13 +13,13 @@ export function SummaryView({
     <article aria-label="Summary" className="rounded-xl border">
       <section className="p-5">
         <div className="flex items-start justify-between gap-4">
-          <h3 className="text-sm font-medium">Overview</h3>
+          <h2 className="text-sm font-medium">Overview</h2>
           {actions}
         </div>
         <p className="mt-3 text-sm leading-7">{summary.overview}</p>
       </section>
       <section className="border-t p-5">
-        <h3 className="text-sm font-medium">Key Takeaways</h3>
+        <h2 className="text-sm font-medium">Key Takeaways</h2>
         <ul
           aria-label="Key Takeaways"
           className="marker:text-muted-foreground mt-3 list-disc space-y-2 pl-5 text-sm leading-6"

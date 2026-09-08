@@ -21,6 +21,7 @@ import {
   speakers,
   type FailedStep,
   type MeetingStatus,
+  type ProcessingStep,
 } from "@/lib/db/schema";
 
 import {
@@ -40,6 +41,7 @@ import {
   type Transcript,
 } from "./transcript";
 import { validateMeetingInput } from "./validation";
+import type { z } from "zod";
 
 export type Speaker = typeof speakers.$inferSelect;
 export type ActionItem = typeof actionItems.$inferSelect;
@@ -194,7 +196,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   /** Runs one pipeline step under the Meeting's processing lock, only if the Meeting is at that step. */
   async function runStep(
     id: string,
-    status: FailedStep,
+    status: ProcessingStep,
     step: (tx: Transaction, meeting: Meeting) => Promise<Meeting>,
   ): Promise<Meeting> {
     return db.transaction(async (tx) => {
@@ -306,16 +308,13 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
       transcript,
     });
-    const result = summarizationOutputSchemaFor({
-      speakerIds: meeting.speakers.map((speaker) => speaker.id),
-    }).safeParse(generated);
-    if (!result.success) {
-      const issue = result.error.issues[0];
-      throw new Error(
-        `The provider returned an invalid Summary: ${issue?.message ?? "unknown issue"}`,
-      );
-    }
-    return result.data;
+    return validateProviderOutput(
+      "Summary",
+      summarizationOutputSchemaFor({
+        speakerIds: meeting.speakers.map((speaker) => speaker.id),
+      }),
+      generated,
+    );
   }
 
   /** Asks the provider for a Transcript and rejects anything that breaks the Transcript rules. */
@@ -330,17 +329,14 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       durationMs,
       targetUtteranceCount: targetUtteranceCount(durationMs),
     });
-    const result = transcriptSchemaFor({
-      durationMs,
-      speakerIds: meeting.speakers.map((speaker) => speaker.id),
-    }).safeParse(generated);
-    if (!result.success) {
-      const issue = result.error.issues[0];
-      throw new Error(
-        `The provider returned an invalid Transcript: ${issue?.message ?? "unknown issue"}`,
-      );
-    }
-    return result.data;
+    return validateProviderOutput(
+      "Transcript",
+      transcriptSchemaFor({
+        durationMs,
+        speakerIds: meeting.speakers.map((speaker) => speaker.id),
+      }),
+      generated,
+    );
   }
 
   async function markFailed(
@@ -374,19 +370,22 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       throw new ActionItemNotFoundError(meetingId, actionItemId);
     }
 
-    const [updated] = await db
-      .update(actionItems)
-      .set({ done: not(actionItems.done) })
-      .where(
-        and(
-          eq(actionItems.id, actionItemId),
-          eq(actionItems.meetingId, meetingId),
-        ),
-      )
-      .returning({ id: actionItems.id });
-    const meeting = await requireMeeting(db, meetingId);
-    if (!updated) throw new ActionItemNotFoundError(meetingId, actionItemId);
-    return meeting;
+    // One transaction, so the returned Meeting shows the flip and nothing that landed after it.
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(actionItems)
+        .set({ done: not(actionItems.done) })
+        .where(
+          and(
+            eq(actionItems.id, actionItemId),
+            eq(actionItems.meetingId, meetingId),
+          ),
+        )
+        .returning({ id: actionItems.id });
+      const meeting = await requireMeeting(tx, meetingId);
+      if (!updated) throw new ActionItemNotFoundError(meetingId, actionItemId);
+      return meeting;
+    });
   }
 
   /**
@@ -553,6 +552,22 @@ function validateStoredDocuments<M extends Meeting>(meeting: M): M {
     summarySchema.parse(meeting.summary);
   }
   return meeting;
+}
+
+/** Runs a provider's answer through its schema; anything the schema rejects is a provider error. */
+function validateProviderOutput<T>(
+  document: "Transcript" | "Summary",
+  schema: { safeParse: (value: unknown) => z.ZodSafeParseResult<T> },
+  generated: unknown,
+): T {
+  const result = schema.safeParse(generated);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new Error(
+      `The provider returned an invalid ${document}: ${issue?.message ?? "unknown issue"}`,
+    );
+  }
+  return result.data;
 }
 
 /** Makes `%`, `_` and `\` match themselves inside a LIKE pattern. */

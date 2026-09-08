@@ -35,6 +35,18 @@ describe("Meeting service", () => {
     });
   const service = serviceWith();
 
+  /** A "Q3 roadmap sync" Meeting taken all the way to ready, ten minutes after START. */
+  async function readyMeeting(target = service) {
+    const created = await target.createMeeting({
+      title: "Q3 roadmap sync",
+      speakers: ["Amara", "Ben", "Chloe"],
+      agenda: "Confirm priorities, pick a launch date",
+    });
+    now = new Date(START.getTime() + 10 * 60_000);
+    await target.stopRecording(created.id);
+    return target.processMeeting(created.id);
+  }
+
   beforeEach(async () => {
     now = START;
     await db.delete(meetings);
@@ -536,17 +548,6 @@ describe("Meeting service", () => {
   });
 
   describe("toggleActionItem", () => {
-    async function readyMeeting() {
-      const created = await service.createMeeting({
-        title: "Q3 roadmap sync",
-        speakers: ["Amara", "Ben", "Chloe"],
-        agenda: "Confirm priorities, pick a launch date",
-      });
-      now = new Date(START.getTime() + 10 * 60_000);
-      await service.stopRecording(created.id);
-      return service.processMeeting(created.id);
-    }
-
     it("marks an Action Item done, then undone, and returns the Meeting each time", async () => {
       const ready = await readyMeeting();
       const [first, second] = ready.actionItems;
@@ -607,17 +608,6 @@ describe("Meeting service", () => {
           return { ...output, overview: `Take ${calls}: ${output.overview}` };
         },
       };
-    }
-
-    async function readyMeeting(target = service) {
-      const created = await target.createMeeting({
-        title: "Q3 roadmap sync",
-        speakers: ["Amara", "Ben", "Chloe"],
-        agenda: "Confirm priorities, pick a launch date",
-      });
-      now = new Date(START.getTime() + 10 * 60_000);
-      await target.stopRecording(created.id);
-      return target.processMeeting(created.id);
     }
 
     it("sends a ready Meeting back to summarizing and keeps the Transcript", async () => {

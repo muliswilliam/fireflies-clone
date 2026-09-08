@@ -68,7 +68,7 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   expect(await takeaways.count()).toBeGreaterThanOrEqual(3);
 
   // The Action Items tab: toggle one done, and it stays done after a reload.
-  await page.getByRole("tab", { name: /Action items/ }).click();
+  await page.getByRole("tab", { name: /Action Items/ }).click();
   const items = page
     .getByRole("list", { name: "Action Items" })
     .getByRole("listitem");
@@ -82,9 +82,11 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   await expect(firstCheckbox).toBeChecked();
   await expect(items.first()).toHaveAttribute("data-done", "true");
   await expect(items.nth(1)).not.toHaveAttribute("data-done", "true");
+  // The tick shows optimistically; the checkbox is disabled until the server has saved it.
+  await expect(firstCheckbox).toBeEnabled();
 
   await page.reload();
-  await page.getByRole("tab", { name: /Action items/ }).click();
+  await page.getByRole("tab", { name: /Action Items/ }).click();
   await expect(items.first().getByRole("checkbox")).toBeChecked();
   await expect(items.nth(1).getByRole("checkbox")).not.toBeChecked();
 
@@ -99,7 +101,7 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   await expect(stepper).toHaveAttribute("data-status", "ready", {
     timeout: 15_000,
   });
-  await page.getByRole("tab", { name: /Action items/ }).click();
+  await page.getByRole("tab", { name: /Action Items/ }).click();
   await expect(items.first().getByRole("checkbox")).not.toBeChecked();
 
   // The list shows the finished Meeting with its duration.

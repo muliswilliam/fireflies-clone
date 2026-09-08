@@ -1,6 +1,6 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 
-import type { FailedStep } from "@/lib/db/schema";
+import type { FailedStep, ProcessingStep } from "@/lib/db/schema";
 
 import { MEETING_STATUS_LABELS } from "./status-badge";
 
@@ -10,7 +10,7 @@ export function ProcessingPanel({
   children,
 }: {
   /** The step currently running, shown as "Transcribing…" or "Summarizing…". */
-  step: FailedStep;
+  step: ProcessingStep;
   children: React.ReactNode;
 }) {
   return (

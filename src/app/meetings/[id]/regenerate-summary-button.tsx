@@ -25,8 +25,12 @@ export function RegenerateSummaryButton({ meetingId }: { meetingId: string }) {
 
   function regenerate() {
     startTransition(async () => {
-      await regenerateSummaryAction(meetingId);
-      setOpen(false);
+      try {
+        await regenerateSummaryAction(meetingId);
+      } finally {
+        // Close even when the action fails, so the dialog never sits disabled.
+        setOpen(false);
+      }
     });
   }
 

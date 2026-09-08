@@ -37,6 +37,7 @@ export async function toggleActionItemAction(
     if (error instanceof MeetingNotFoundError) notFound();
     // The item vanished under the user (a regenerate landed meanwhile); the refreshed page explains.
     if (!(error instanceof ActionItemNotFoundError)) throw error;
+    console.warn(error.message);
   }
   revalidatePath(`/meetings/${meetingId}`);
 }

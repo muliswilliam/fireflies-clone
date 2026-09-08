@@ -75,7 +75,7 @@ export function generateFakeSummary(
 
 const OVERVIEWS = [
   "{names} met to work through {subject}. They started with {first}, agreed on an approach, and closed with owners for the follow-ups.",
-  "A {count}-person session on {subject}. The group focused on {first} and left with clear next steps.",
+  "A {count}-person session on {subject}. The group focused on {first} and left with Action Items assigned.",
   "This Meeting covered {subject}. {names} weighed the options, settled the open questions, and assigned the remaining work.",
 ];
 
