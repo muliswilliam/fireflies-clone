@@ -2,15 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 
 import {
   ActionItemNotFoundError,
   getMeetingService,
   MeetingNotFailedError,
   MeetingNotFoundError,
-  type MeetingService,
 } from "@/lib/meetings";
+
+import { scheduleProcessing } from "../schedule-processing";
 
 /**
  * Thin: ends the Recording, schedules processing to continue after the response (ADR-0002),
@@ -77,16 +77,4 @@ export async function retryMeetingAction(meetingId: string): Promise<void> {
     console.warn(error.message);
   }
   revalidatePath(`/meetings/${meetingId}`);
-}
-
-function scheduleProcessing(service: MeetingService, meetingId: string) {
-  after(async () => {
-    try {
-      await service.processMeeting(meetingId);
-    } catch (error) {
-      // processMeeting only throws on infrastructure failure; the Meeting stays in-flight
-      // until someone retries (ADR-0002 accepts this).
-      console.error(`Processing Meeting ${meetingId} did not complete`, error);
-    }
-  });
 }

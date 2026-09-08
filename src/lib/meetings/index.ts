@@ -16,6 +16,7 @@ export {
 } from "./errors";
 export type {
   ActionItem,
+  CreateInstantMeetingInput,
   CreateMeetingInput,
   ListMeetingsInput,
   Meeting,
@@ -26,7 +27,14 @@ export type {
 } from "./service";
 export type { Summary } from "./summary";
 export type { Transcript, Utterance } from "./transcript";
-export { MAX_SPEAKERS, MIN_SPEAKERS } from "./validation";
+export {
+  DEFAULT_INSTANT_MEETING_DURATION_MINUTES,
+  INSTANT_MEETING_DURATION_OPTIONS_MINUTES,
+  MAX_SPEAKERS,
+  MIN_SPEAKERS,
+  parseInstantMeetingDuration,
+  type InstantMeetingDurationMinutes,
+} from "./validation";
 
 const globalForService = globalThis as typeof globalThis & {
   __fireflyMeetingService?: MeetingService;

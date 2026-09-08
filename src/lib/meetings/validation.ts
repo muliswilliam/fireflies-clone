@@ -3,21 +3,82 @@ import { MeetingValidationError, type MeetingValidationIssue } from "./errors";
 export const MIN_SPEAKERS = 2;
 export const MAX_SPEAKERS = 6;
 
+/** How long an Instant Meeting's Recording may be said to have run, in minutes. */
+export const INSTANT_MEETING_DURATION_OPTIONS_MINUTES = [
+  5, 15, 30, 60,
+] as const;
+export type InstantMeetingDurationMinutes =
+  (typeof INSTANT_MEETING_DURATION_OPTIONS_MINUTES)[number];
+export const DEFAULT_INSTANT_MEETING_DURATION_MINUTES: InstantMeetingDurationMinutes = 30;
+
+export type MeetingInput = {
+  title: string;
+  speakers: string[];
+  agenda?: string | null;
+};
+
 export type ValidatedMeetingInput = {
   title: string;
   speakers: string[];
   agenda: string | null;
 };
 
+export type ValidatedInstantMeetingInput = ValidatedMeetingInput & {
+  durationMinutes: InstantMeetingDurationMinutes;
+};
+
 /**
  * Applies the Meeting creation rules and returns normalised values.
  * Throws `MeetingValidationError` listing every broken rule so a form can show them inline.
  */
-export function validateMeetingInput(input: {
-  title: string;
-  speakers: string[];
-  agenda?: string | null;
-}): ValidatedMeetingInput {
+export function validateMeetingInput(
+  input: MeetingInput,
+): ValidatedMeetingInput {
+  const { normalized, issues } = checkMeetingRules(input);
+  if (issues.length > 0) throw new MeetingValidationError(issues);
+  return normalized;
+}
+
+/**
+ * The Meeting creation rules plus the Instant Meeting rule: the duration must be one of the
+ * offered options, and a missing duration means the default. Same error contract.
+ */
+export function validateInstantMeetingInput(
+  input: MeetingInput & { durationMinutes?: number },
+): ValidatedInstantMeetingInput {
+  const { normalized, issues } = checkMeetingRules(input);
+  const durationMinutes =
+    input.durationMinutes === undefined
+      ? DEFAULT_INSTANT_MEETING_DURATION_MINUTES
+      : parseInstantMeetingDuration(input.durationMinutes);
+  if (durationMinutes === null) {
+    issues.push({
+      path: "durationMinutes",
+      message: "Pick one of the offered durations",
+    });
+  }
+  if (issues.length > 0 || durationMinutes === null) {
+    throw new MeetingValidationError(issues);
+  }
+  return { ...normalized, durationMinutes };
+}
+
+/** The offered option `value` names (as a number or its string form), or `null` for anything else. */
+export function parseInstantMeetingDuration(
+  value: unknown,
+): InstantMeetingDurationMinutes | null {
+  const minutes = typeof value === "string" ? Number(value) : value;
+  const options: readonly unknown[] = INSTANT_MEETING_DURATION_OPTIONS_MINUTES;
+  return options.includes(minutes)
+    ? (minutes as InstantMeetingDurationMinutes)
+    : null;
+}
+
+/** Checks the rules shared by every kind of Meeting and reports every broken one. */
+function checkMeetingRules(input: MeetingInput): {
+  normalized: ValidatedMeetingInput;
+  issues: MeetingValidationIssue[];
+} {
   const issues: MeetingValidationIssue[] = [];
 
   const title = input.title.trim();
@@ -52,10 +113,9 @@ export function validateMeetingInput(input: {
     seen.add(key);
   });
 
-  if (issues.length > 0) {
-    throw new MeetingValidationError(issues);
-  }
-
   const agenda = input.agenda?.trim() ?? "";
-  return { title, speakers, agenda: agenda.length > 0 ? agenda : null };
+  return {
+    normalized: { title, speakers, agenda: agenda.length > 0 ? agenda : null },
+    issues,
+  };
 }

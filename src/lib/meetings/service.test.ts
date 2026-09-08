@@ -17,6 +17,7 @@ import {
   createMeetingService,
   type MeetingServiceConfig,
 } from "@/lib/meetings/service";
+import { DEFAULT_INSTANT_MEETING_DURATION_MINUTES } from "@/lib/meetings/validation";
 
 import { testDatabaseUrl } from "../../../tests/test-database";
 
@@ -168,6 +169,141 @@ describe("Meeting service", () => {
         { path: "title", message: "Give the Meeting a title" },
         { path: "speakers.1", message: "Every Speaker needs a name" },
       ]);
+    });
+  });
+
+  describe("createInstantMeeting", () => {
+    const input = {
+      title: "Q3 roadmap sync",
+      speakers: ["Amara Okafor", "Ben Liu", "Chloe Martin"],
+      agenda: "Scope, dates, owners",
+    };
+
+    it("creates a Meeting whose Recording already ended, ready to transcribe", async () => {
+      const created = await service.createInstantMeeting({
+        ...input,
+        durationMinutes: 15,
+      });
+
+      expect(created).toMatchObject({
+        title: "Q3 roadmap sync",
+        status: "transcribing",
+        agenda: "Scope, dates, owners",
+        isSample: false,
+        isInstant: true,
+        recordingStartedAt: new Date(START.getTime() - 15 * 60_000),
+        recordingEndedAt: START,
+        createdAt: START,
+        transcript: null,
+        summary: null,
+        actionItems: [],
+      });
+      expect(created.speakers.map((speaker) => speaker.name)).toEqual(
+        input.speakers,
+      );
+      expect(await service.getMeeting(created.id)).toEqual(created);
+      await expect(service.getMeetingStatus(created.id)).resolves.toEqual({
+        status: "transcribing",
+        failedStep: null,
+      });
+    });
+
+    it("defaults the duration to 30 minutes", async () => {
+      const created = await service.createInstantMeeting(input);
+
+      expect(
+        created.recordingEndedAt!.getTime() -
+          created.recordingStartedAt.getTime(),
+      ).toBe(DEFAULT_INSTANT_MEETING_DURATION_MINUTES * 60_000);
+      expect(DEFAULT_INSTANT_MEETING_DURATION_MINUTES).toBe(30);
+    });
+
+    it.each([
+      { durationMinutes: 5, utterances: 25 },
+      { durationMinutes: 15, utterances: 75 },
+      { durationMinutes: 30, utterances: 80 },
+      { durationMinutes: 60, utterances: 80 },
+    ])(
+      "a $durationMinutes minute Instant Meeting gets a Transcript of $utterances Utterances, then becomes ready",
+      async ({ durationMinutes, utterances }) => {
+        const created = await service.createInstantMeeting({
+          ...input,
+          durationMinutes,
+        });
+
+        const processed = await service.processMeeting(created.id);
+
+        expect(processed.status).toBe("ready");
+        expect(processed.transcript!.utterances).toHaveLength(utterances);
+        const last = processed.transcript!.utterances.at(-1)!;
+        expect(last.endMs).toBeLessThanOrEqual(durationMinutes * 60_000);
+        expect(processed.summary).not.toBeNull();
+      },
+    );
+
+    it("applies the same validation as a live Meeting", async () => {
+      await expect(
+        service.createInstantMeeting({
+          title: "  ",
+          speakers: ["Amara", "amara"],
+        }),
+      ).rejects.toMatchObject({
+        name: "MeetingValidationError",
+        issues: [
+          { path: "title", message: "Give the Meeting a title" },
+          { path: "speakers.1", message: "Speaker names must be unique" },
+        ],
+      });
+    });
+
+    it("rejects a duration that is not one of the offered options", async () => {
+      for (const durationMinutes of [0, -5, 7, 30.5, Number.NaN]) {
+        await expect(
+          service.createInstantMeeting({ ...input, durationMinutes }),
+        ).rejects.toMatchObject({
+          name: "MeetingValidationError",
+          issues: [
+            {
+              path: "durationMinutes",
+              message: "Pick one of the offered durations",
+            },
+          ],
+        });
+      }
+      expect(await service.listMeetings({})).toEqual([]);
+    });
+
+    it("counts toward and is refused by the daily cap like a live Meeting", async () => {
+      await service.createInstantMeeting(input);
+      await service.createInstantMeeting(input);
+      await service.createMeeting(input);
+
+      await expect(service.createInstantMeeting(input)).rejects.toBeInstanceOf(
+        DailyCapReachedError,
+      );
+      await expect(service.createMeeting(input)).rejects.toBeInstanceOf(
+        DailyCapReachedError,
+      );
+      await expect(
+        service.createInstantMeeting({ ...input, isSample: true }),
+      ).resolves.toMatchObject({ isSample: true, isInstant: true });
+    });
+
+    it("is listed like any other Meeting, with its duration", async () => {
+      const created = await service.createInstantMeeting({
+        ...input,
+        durationMinutes: 5,
+      });
+
+      const [listed] = await service.listMeetings({});
+
+      expect(listed).toMatchObject({
+        id: created.id,
+        status: "transcribing",
+        recordingStartedAt: created.recordingStartedAt,
+        recordingEndedAt: START,
+        speakerCount: 3,
+      });
     });
   });
 
