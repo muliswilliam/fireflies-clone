@@ -10,7 +10,7 @@ import {
 } from "@/lib/meetings";
 
 import { scheduleProcessing } from "../schedule-processing";
-import { isCreateIntent, type CreateMeetingFormState } from "./form-state";
+import type { CreateIntent, CreateMeetingFormState } from "./form-state";
 
 /**
  * Thin: reads the form, calls the Meeting service, redirects to the new Meeting. Which submit
@@ -21,7 +21,9 @@ export async function createMeetingAction(
   _previous: CreateMeetingFormState,
   formData: FormData,
 ): Promise<CreateMeetingFormState> {
-  const intent = formData.get("intent");
+  // Anything but the Instant button (including no submitter at all) starts a live Recording.
+  const intent: CreateIntent =
+    formData.get("intent") === "instant" ? "instant" : "start";
   const input = {
     title: String(formData.get("title") ?? ""),
     speakers: formData.getAll("speakers").map(String),
@@ -31,7 +33,7 @@ export async function createMeetingAction(
 
   let meeting: Meeting;
   try {
-    if (isCreateIntent(intent) && intent === "instant") {
+    if (intent === "instant") {
       const duration = formData.get("durationMinutes");
       meeting = await service.createInstantMeeting({
         ...input,

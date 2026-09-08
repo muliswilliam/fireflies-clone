@@ -32,8 +32,6 @@ export {
   INSTANT_MEETING_DURATION_OPTIONS_MINUTES,
   MAX_SPEAKERS,
   MIN_SPEAKERS,
-  parseInstantMeetingDuration,
-  type InstantMeetingDurationMinutes,
 } from "./validation";
 
 const globalForService = globalThis as typeof globalThis & {

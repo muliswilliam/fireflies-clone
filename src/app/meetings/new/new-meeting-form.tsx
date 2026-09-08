@@ -219,13 +219,7 @@ function InstantMeetingSection({
           </p>
         </div>
       </div>
-      <FieldSet
-        data-invalid={durationError ? true : undefined}
-        className="mt-4 gap-3"
-      >
-        <FieldLegend variant="label" className="sr-only">
-          Duration
-        </FieldLegend>
+      <div className="mt-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <DurationOptions invalid={durationError !== null} />
           <SubmitButton intent="instant" variant="outline" size="lg">
@@ -234,7 +228,7 @@ function InstantMeetingSection({
           </SubmitButton>
         </div>
         <FieldError>{durationError}</FieldError>
-      </FieldSet>
+      </div>
     </section>
   );
 }

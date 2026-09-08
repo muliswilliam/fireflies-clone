@@ -50,28 +50,23 @@ export function validateInstantMeetingInput(
   const durationMinutes =
     input.durationMinutes === undefined
       ? DEFAULT_INSTANT_MEETING_DURATION_MINUTES
-      : parseInstantMeetingDuration(input.durationMinutes);
-  if (durationMinutes === null) {
+      : input.durationMinutes;
+  if (!isOfferedDuration(durationMinutes)) {
     issues.push({
       path: "durationMinutes",
       message: "Pick one of the offered durations",
     });
-  }
-  if (issues.length > 0 || durationMinutes === null) {
     throw new MeetingValidationError(issues);
   }
+  if (issues.length > 0) throw new MeetingValidationError(issues);
   return { ...normalized, durationMinutes };
 }
 
-/** The offered option `value` names (as a number or its string form), or `null` for anything else. */
-export function parseInstantMeetingDuration(
-  value: unknown,
-): InstantMeetingDurationMinutes | null {
-  const minutes = typeof value === "string" ? Number(value) : value;
-  const options: readonly unknown[] = INSTANT_MEETING_DURATION_OPTIONS_MINUTES;
-  return options.includes(minutes)
-    ? (minutes as InstantMeetingDurationMinutes)
-    : null;
+function isOfferedDuration(
+  minutes: number,
+): minutes is InstantMeetingDurationMinutes {
+  const options: readonly number[] = INSTANT_MEETING_DURATION_OPTIONS_MINUTES;
+  return options.includes(minutes);
 }
 
 /** Checks the rules shared by every kind of Meeting and reports every broken one. */

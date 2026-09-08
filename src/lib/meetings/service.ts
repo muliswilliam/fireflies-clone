@@ -172,7 +172,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   /** Inserts a Meeting and its Speakers in one transaction, under the daily cap (ADR-0005). */
   async function insertMeeting(
     normalized: ValidatedMeetingInput,
-    row: NewMeetingRow,
+    row: MeetingKindColumns,
   ): Promise<Meeting> {
     return db.transaction(async (tx) => {
       if (!row.isSample) {
@@ -634,8 +634,8 @@ type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 /** Anything queries can run on: the shared handle or an open transaction. */
 type Executor = Db | Transaction;
 
-/** What distinguishes one kind of new Meeting from another; the title, agenda and Speakers come validated. */
-type NewMeetingRow = Required<
+/** The columns that differ between a live and an Instant Meeting at creation; title, agenda and Speakers come validated. */
+type MeetingKindColumns = Required<
   Pick<
     typeof meetings.$inferInsert,
     | "status"
