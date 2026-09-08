@@ -7,6 +7,7 @@ import { after } from "next/server";
 import {
   ActionItemNotFoundError,
   getMeetingService,
+  MeetingNotFailedError,
   MeetingNotFoundError,
   type MeetingService,
 } from "@/lib/meetings";
@@ -57,6 +58,24 @@ export async function regenerateSummaryAction(
     throw error;
   }
   scheduleProcessing(service, meetingId);
+  revalidatePath(`/meetings/${meetingId}`);
+}
+
+/**
+ * Sends a failed Meeting back to the step that failed and schedules processing from there
+ * (ADR-0002). A Meeting that already has a Transcript resumes at summarizing.
+ */
+export async function retryMeetingAction(meetingId: string): Promise<void> {
+  const service = getMeetingService();
+  try {
+    await service.retryMeeting(meetingId);
+    scheduleProcessing(service, meetingId);
+  } catch (error) {
+    if (error instanceof MeetingNotFoundError) notFound();
+    // Someone else pressed Retry first; the refreshed page shows the Meeting in flight.
+    if (!(error instanceof MeetingNotFailedError)) throw error;
+    console.warn(error.message);
+  }
   revalidatePath(`/meetings/${meetingId}`);
 }
 

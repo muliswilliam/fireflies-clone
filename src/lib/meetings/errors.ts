@@ -51,3 +51,18 @@ export class ActionItemNotFoundError extends Error {
     this.actionItemId = actionItemId;
   }
 }
+
+/** Retry was asked of a Meeting that is not `failed`; only a failed Meeting has a step to resume. */
+export class MeetingNotFailedError extends Error {
+  readonly meetingId: string;
+  readonly status: string;
+
+  constructor(meetingId: string, status: string) {
+    super(
+      `Meeting ${meetingId} is ${status}, not failed, so there is nothing to retry`,
+    );
+    this.name = "MeetingNotFailedError";
+    this.meetingId = meetingId;
+    this.status = status;
+  }
+}

@@ -78,6 +78,8 @@ export function StatusStepper({
         return (
           <li
             key={step}
+            data-step={step}
+            data-step-state={state}
             aria-current={
               state === "current" || state === "failed" ? "step" : undefined
             }
@@ -95,7 +97,10 @@ export function StatusStepper({
               <span
                 className={cn("text-xs font-medium sm:text-sm", styles.label)}
               >
-                {state === "failed" ? "Failed" : MEETING_STATUS_LABELS[step]}
+                {MEETING_STATUS_LABELS[step]}
+                {state === "failed" && (
+                  <span className="sr-only">, failed</span>
+                )}
               </span>
             </div>
             {index < STEPS.length - 1 && (

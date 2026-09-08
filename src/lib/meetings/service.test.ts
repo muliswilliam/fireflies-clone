@@ -9,6 +9,7 @@ import { meetings } from "@/lib/db/schema";
 import {
   ActionItemNotFoundError,
   DailyCapReachedError,
+  MeetingNotFailedError,
   MeetingNotFoundError,
   MeetingValidationError,
 } from "@/lib/meetings/errors";
@@ -545,6 +546,47 @@ describe("Meeting service", () => {
       expect(processed.errorMessage).toMatch(/Transcript/);
       expect(processed.transcript).toBeNull();
     });
+
+    it("marks the Meeting failed at transcribing when the provider does not answer in time", async () => {
+      const hanging: TranscriptionProvider = {
+        generateTranscript: () => new Promise(() => {}),
+      };
+      const impatient = serviceWith({
+        transcriptionProvider: hanging,
+        providerTimeoutMs: 50,
+      });
+      const stopped = await stoppedMeeting();
+
+      const processed = await impatient.processMeeting(stopped.id);
+
+      expect(processed).toMatchObject({
+        status: "failed",
+        failedStep: "transcribing",
+        transcript: null,
+      });
+      expect(processed.errorMessage).toMatch(/did not answer within 50 ms/);
+    });
+
+    it("marks the Meeting failed at summarizing when the provider does not answer in time", async () => {
+      const hanging: SummarizationProvider = {
+        summarize: () => new Promise(() => {}),
+      };
+      const impatient = serviceWith({
+        summarizationProvider: hanging,
+        providerTimeoutMs: 50,
+      });
+      const stopped = await stoppedMeeting();
+
+      const processed = await impatient.processMeeting(stopped.id);
+
+      expect(processed).toMatchObject({
+        status: "failed",
+        failedStep: "summarizing",
+        summary: null,
+      });
+      expect(processed.transcript).not.toBeNull();
+      expect(processed.errorMessage).toMatch(/did not answer within 50 ms/);
+    });
   });
 
   describe("toggleActionItem", () => {
@@ -686,6 +728,176 @@ describe("Meeting service", () => {
       await expect(
         service.regenerateSummary("00000000-0000-4000-8000-000000000000"),
       ).rejects.toBeInstanceOf(MeetingNotFoundError);
+    });
+  });
+
+  describe("retryMeeting", () => {
+    const broken: SummarizationProvider = {
+      summarize: async () => {
+        throw new Error("Claude is unavailable");
+      },
+    };
+    const brokenTranscription: TranscriptionProvider = {
+      generateTranscript: async () => {
+        throw new Error("Claude is unavailable");
+      },
+    };
+
+    /** A TranscriptionProvider that counts how often it is asked, to prove a Transcript is reused. */
+    function countingTranscription() {
+      const state = { calls: 0 };
+      const provider: TranscriptionProvider = {
+        generateTranscript: async (input) => {
+          state.calls += 1;
+          return createFakeTranscriptionProvider().generateTranscript(input);
+        },
+      };
+      return { provider, state };
+    }
+
+    async function failedAt(step: "transcribing" | "summarizing") {
+      const failing = serviceWith(
+        step === "transcribing"
+          ? { transcriptionProvider: brokenTranscription }
+          : { summarizationProvider: broken },
+      );
+      const created = await failing.createMeeting({
+        title: "Q3 roadmap sync",
+        speakers: ["Amara", "Ben", "Chloe"],
+        agenda: "Confirm priorities, pick a launch date",
+      });
+      now = new Date(START.getTime() + 10 * 60_000);
+      await failing.stopRecording(created.id);
+      const failed = await failing.processMeeting(created.id);
+      expect(failed).toMatchObject({ status: "failed", failedStep: step });
+      return failed;
+    }
+
+    it("moves a Meeting that failed at transcribing back to transcribing and clears the failure", async () => {
+      const failed = await failedAt("transcribing");
+      now = new Date(now.getTime() + 60_000);
+
+      const retrying = await service.retryMeeting(failed.id);
+
+      expect(retrying).toMatchObject({
+        id: failed.id,
+        status: "transcribing",
+        failedStep: null,
+        errorMessage: null,
+        transcript: null,
+        updatedAt: now,
+      });
+      expect(await service.getMeeting(failed.id)).toEqual(retrying);
+      await expect(service.getMeetingStatus(failed.id)).resolves.toEqual({
+        status: "transcribing",
+        failedStep: null,
+      });
+    });
+
+    it("moves a Meeting that failed at summarizing back to summarizing, keeping its Transcript", async () => {
+      const failed = await failedAt("summarizing");
+
+      const retrying = await service.retryMeeting(failed.id);
+
+      expect(retrying).toMatchObject({
+        status: "summarizing",
+        failedStep: null,
+        errorMessage: null,
+        transcript: failed.transcript,
+      });
+    });
+
+    it("takes a Meeting that failed at transcribing all the way to ready once processed", async () => {
+      const failed = await failedAt("transcribing");
+
+      await service.retryMeeting(failed.id);
+      const recovered = await service.processMeeting(failed.id);
+
+      expect(recovered.status).toBe("ready");
+      expect(recovered.failedStep).toBeNull();
+      expect(recovered.errorMessage).toBeNull();
+      expect(recovered.transcript).not.toBeNull();
+      expect(recovered.summary).not.toBeNull();
+      expect(recovered.actionItems.length).toBeGreaterThan(0);
+    });
+
+    it("resumes at summarizing without asking the TranscriptionProvider again", async () => {
+      const counting = countingTranscription();
+      const firstAttempt = serviceWith({
+        transcriptionProvider: counting.provider,
+        summarizationProvider: broken,
+      });
+      const created = await firstAttempt.createMeeting({
+        title: "Q3 roadmap sync",
+        speakers: ["Amara", "Ben", "Chloe"],
+      });
+      now = new Date(START.getTime() + 10 * 60_000);
+      await firstAttempt.stopRecording(created.id);
+      const failed = await firstAttempt.processMeeting(created.id);
+      expect(failed.failedStep).toBe("summarizing");
+      expect(counting.state.calls).toBe(1);
+
+      const secondAttempt = serviceWith({
+        transcriptionProvider: counting.provider,
+      });
+      await secondAttempt.retryMeeting(created.id);
+      const recovered = await secondAttempt.processMeeting(created.id);
+
+      expect(recovered.status).toBe("ready");
+      expect(recovered.transcript).toEqual(failed.transcript);
+      expect(recovered.summary).not.toBeNull();
+      expect(counting.state.calls).toBe(1);
+    });
+
+    it("can fail again and be retried again", async () => {
+      const failed = await failedAt("summarizing");
+
+      await service.retryMeeting(failed.id);
+      const failedAgain = await serviceWith({
+        summarizationProvider: broken,
+      }).processMeeting(failed.id);
+      expect(failedAgain).toMatchObject({
+        status: "failed",
+        failedStep: "summarizing",
+      });
+
+      await service.retryMeeting(failed.id);
+      const recovered = await service.processMeeting(failed.id);
+
+      expect(recovered.status).toBe("ready");
+    });
+
+    it("rejects a Meeting that has not failed", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      const rejection = await service
+        .retryMeeting(created.id)
+        .catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(MeetingNotFailedError);
+      expect(rejection).toMatchObject({
+        meetingId: created.id,
+        status: "recording",
+      });
+      expect(await service.getMeeting(created.id)).toEqual(created);
+
+      const ready = await readyMeeting();
+      await expect(service.retryMeeting(ready.id)).rejects.toMatchObject({
+        name: "MeetingNotFailedError",
+        status: "ready",
+      });
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.retryMeeting("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+      await expect(service.retryMeeting("nope")).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
     });
   });
 

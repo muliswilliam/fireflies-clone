@@ -4,6 +4,10 @@ import { getEnv } from "@/lib/env";
 
 import { createFakeSummarizationProvider } from "./fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "./fake-transcription-provider";
+import {
+  withSummarizationFaultInjection,
+  withTranscriptionFaultInjection,
+} from "./fault-injection";
 import type { SummarizationProvider } from "./summarization-provider";
 import type { TranscriptionProvider } from "./transcription-provider";
 
@@ -19,6 +23,21 @@ export type {
 
 /** Picks the TranscriptionProvider named by `AI_PROVIDER` (ADR-0001). */
 export function getTranscriptionProvider(): TranscriptionProvider {
+  const provider = selectTranscriptionProvider();
+  return getEnv().E2E_FAULT_INJECTION
+    ? withTranscriptionFaultInjection(provider)
+    : provider;
+}
+
+/** Picks the SummarizationProvider named by `AI_PROVIDER`. */
+export function getSummarizationProvider(): SummarizationProvider {
+  const provider = selectSummarizationProvider();
+  return getEnv().E2E_FAULT_INJECTION
+    ? withSummarizationFaultInjection(provider)
+    : provider;
+}
+
+function selectTranscriptionProvider(): TranscriptionProvider {
   switch (getEnv().AI_PROVIDER) {
     case "fake":
       return createFakeTranscriptionProvider();
@@ -35,8 +54,7 @@ export function getTranscriptionProvider(): TranscriptionProvider {
   }
 }
 
-/** Picks the SummarizationProvider named by `AI_PROVIDER`. */
-export function getSummarizationProvider(): SummarizationProvider {
+function selectSummarizationProvider(): SummarizationProvider {
   switch (getEnv().AI_PROVIDER) {
     case "fake":
       return createFakeSummarizationProvider();

@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMeetingService, type Meeting } from "@/lib/meetings";
 
 import { ActionItemsList } from "./action-items-list";
+import { FailedBanner } from "./failed-banner";
 import { RecordingPanel } from "./recording-panel";
 import { RegenerateSummaryButton } from "./regenerate-summary-button";
 
@@ -66,6 +67,14 @@ export default async function MeetingPage({
           failedStep={meeting.failedStep}
         />
       </section>
+
+      {meeting.status === "failed" && (
+        <FailedBanner
+          meetingId={meeting.id}
+          failedStep={meeting.failedStep}
+          errorMessage={meeting.errorMessage}
+        />
+      )}
 
       {meeting.status === "recording" && (
         <RecordingPanel
@@ -143,10 +152,7 @@ function TranscriptPanel({ meeting }: { meeting: Meeting }) {
   }
   if (meeting.status === "failed") {
     return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
+      <FailedPanel document="Transcript" failedStep={meeting.failedStep} />
     );
   }
   return (
@@ -166,12 +172,7 @@ function SummaryPanel({ meeting }: { meeting: Meeting }) {
     );
   }
   if (meeting.status === "failed") {
-    return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
-    );
+    return <FailedPanel document="Summary" failedStep={meeting.failedStep} />;
   }
   return <SummaryProcessing meeting={meeting} />;
 }
@@ -188,10 +189,7 @@ function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
   }
   if (meeting.status === "failed") {
     return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
+      <FailedPanel document="Action Items" failedStep={meeting.failedStep} />
     );
   }
   return <SummaryProcessing meeting={meeting} />;
