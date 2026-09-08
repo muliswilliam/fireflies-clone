@@ -111,6 +111,7 @@ jobs:
         run: |
           docker run --detach --name firefly-notes --network host \
             --env PORT=3456 \
+            --env AI_PROVIDER=fake \
             --env DATABASE_URL=postgres://postgres:postgres@localhost:5432/firefly_notes \
             firefly-notes:ci
           for attempt in $(seq 1 30); do

@@ -1,7 +1,15 @@
 import "server-only";
 
+import Anthropic from "@anthropic-ai/sdk";
+
 import { getEnv } from "@/lib/env";
 
+import {
+  createClaudeStructuredGenerator,
+  type ClaudeStructuredGenerator,
+} from "./claude-structured-generator";
+import { createClaudeSummarizationProvider } from "./claude-summarization-provider";
+import { createClaudeTranscriptionProvider } from "./claude-transcription-provider";
 import { createFakeSummarizationProvider } from "./fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "./fake-transcription-provider";
 import {
@@ -42,15 +50,7 @@ function selectTranscriptionProvider(): TranscriptionProvider {
     case "fake":
       return createFakeTranscriptionProvider();
     case "claude":
-      // #8 replaces this with the Claude adapter. Failing inside the pipeline, rather than at
-      // startup, keeps the rest of the app usable and shows the reason on the Meeting.
-      return {
-        async generateTranscript() {
-          throw new Error(
-            "The Claude TranscriptionProvider is not available yet. Set AI_PROVIDER=fake.",
-          );
-        },
-      };
+      return createClaudeTranscriptionProvider(getClaudeGenerator());
   }
 }
 
@@ -59,13 +59,18 @@ function selectSummarizationProvider(): SummarizationProvider {
     case "fake":
       return createFakeSummarizationProvider();
     case "claude":
-      // #8 replaces this with the Claude adapter; see getTranscriptionProvider.
-      return {
-        async summarize() {
-          throw new Error(
-            "The Claude SummarizationProvider is not available yet. Set AI_PROVIDER=fake.",
-          );
-        },
-      };
+      return createClaudeSummarizationProvider(getClaudeGenerator());
   }
+}
+
+let claudeGenerator: ClaudeStructuredGenerator | undefined;
+
+/** One Claude client for both providers. `getEnv` has already insisted on the key when the provider is `claude`. */
+function getClaudeGenerator(): ClaudeStructuredGenerator {
+  const env = getEnv();
+  claudeGenerator ??= createClaudeStructuredGenerator({
+    client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
+    model: env.AI_MODEL,
+  });
+  return claudeGenerator;
 }
