@@ -22,6 +22,13 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   await expect(stepper).toHaveAttribute("data-status", "ready", {
     timeout: 15_000,
   });
+  const statusResponse = await page.request.get(
+    `/api/meetings/${page.url().split("/").at(-1)}/status`,
+  );
+  expect(await statusResponse.json()).toEqual({
+    status: "ready",
+    failedStep: null,
+  });
   await expect(
     page.getByRole("button", { name: "Stop recording" }),
   ).toHaveCount(0);
@@ -55,9 +62,7 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   await expect(row).toContainText(/\d+ s/);
 });
 
-test("status route reports a Meeting's Status and 404s for unknown ids", async ({
-  request,
-}) => {
+test("status route 404s for an unknown Meeting", async ({ request }) => {
   const missing = await request.get(
     "/api/meetings/00000000-0000-4000-8000-000000000000/status",
   );

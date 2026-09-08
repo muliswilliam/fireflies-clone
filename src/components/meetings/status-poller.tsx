@@ -36,6 +36,13 @@ export function StatusPoller({
         const response = await fetch(`/api/meetings/${meetingId}/status`, {
           cache: "no-store",
         });
+        if (response.status === 404) {
+          // The Meeting is gone; let the page render its not-found state.
+          cancelled = true;
+          clearInterval(interval);
+          router.refresh();
+          return;
+        }
         if (!response.ok) return;
         const report = (await response.json()) as MeetingStatusReport;
         if (!cancelled && report.status !== status) router.refresh();

@@ -5,7 +5,7 @@ import { cache } from "react";
 
 import { BackToMeetingsLink } from "@/components/back-to-meetings-link";
 import { MeetingMeta } from "@/components/meetings/meeting-meta";
-import { RecordingPanel } from "@/components/meetings/recording-panel";
+import { RecordingPanel } from "./recording-panel";
 import { SpeakerNumber } from "@/components/meetings/speaker-number";
 import {
   MEETING_STATUS_LABELS,

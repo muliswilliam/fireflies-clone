@@ -67,6 +67,9 @@ const CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Serialises cap checks so two concurrent creates cannot both pass at the boundary. */
 const CAP_LOCK_KEY = "meetings:daily-cap";
 
+/** One processing run per Meeting at a time, so a duplicate Stop or an eager Retry never pays the provider twice. */
+const processLockKey = (id: string) => `meetings:process:${id}`;
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -135,7 +138,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       .where(and(eq(meetings.id, id), eq(meetings.status, "recording")))
       .returning();
 
-    return updated ? withSpeakers(updated) : requireMeeting(id);
+    return afterGuardedUpdate(db, id, updated);
   }
 
   /**
@@ -145,25 +148,40 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
    * Provider failures never throw; they leave the Meeting `failed` at the step that broke.
    */
   async function processMeeting(id: string): Promise<Meeting> {
-    const meeting = await requireMeeting(id);
-    if (meeting.status !== "transcribing") return meeting;
-    return transcribe(meeting);
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+
+    return db.transaction(async (tx) => {
+      // The lock is held for the whole run, provider call included, and released with the
+      // transaction. A concurrent run gives up and reports whatever state it can see.
+      const { rows } = await tx.execute<{ locked: boolean }>(
+        sql`select pg_try_advisory_xact_lock(hashtext(${processLockKey(id)})) as locked`,
+      );
+      if (!rows[0]?.locked) return requireMeeting(tx, id);
+
+      const meeting = await requireMeeting(tx, id);
+      if (meeting.status !== "transcribing" || !meeting.recordingEndedAt) {
+        return meeting;
+      }
+      return transcribe(tx, meeting, meeting.recordingEndedAt);
+    });
   }
 
-  async function transcribe(meeting: Meeting): Promise<Meeting> {
+  async function transcribe(
+    tx: Executor,
+    meeting: Meeting,
+    recordingEndedAt: Date,
+  ): Promise<Meeting> {
     const durationMs =
-      meeting.recordingEndedAt!.getTime() -
-      meeting.recordingStartedAt.getTime();
+      recordingEndedAt.getTime() - meeting.recordingStartedAt.getTime();
 
     let transcript: Transcript;
     try {
       transcript = await generateTranscript(meeting, durationMs);
     } catch (error) {
-      return markFailed(meeting.id, "transcribing", error);
+      return markFailed(tx, meeting.id, "transcribing", error);
     }
 
-    // Only the first writer wins if two runs race; the loser reads what the winner stored.
-    const [updated] = await db
+    const [updated] = await tx
       .update(meetings)
       .set({ status: "ready", transcript, updatedAt: now() })
       .where(
@@ -174,7 +192,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
         ),
       )
       .returning();
-    return updated ? withSpeakers(updated) : requireMeeting(meeting.id);
+    return afterGuardedUpdate(tx, meeting.id, updated);
   }
 
   /** Asks the provider for a Transcript and rejects anything that breaks the Transcript rules. */
@@ -203,13 +221,14 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   }
 
   async function markFailed(
+    tx: Executor,
     id: string,
     step: FailedStep,
     error: unknown,
   ): Promise<Meeting> {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Meeting ${id} failed at ${step}:`, error);
-    const [updated] = await db
+    const [updated] = await tx
       .update(meetings)
       .set({
         status: "failed",
@@ -219,18 +238,12 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       })
       .where(and(eq(meetings.id, id), eq(meetings.status, step)))
       .returning();
-    return updated ? withSpeakers(updated) : requireMeeting(id);
+    return afterGuardedUpdate(tx, id, updated);
   }
 
   /** Returns the Meeting with its Speakers, or `null` when `id` is unknown or not a uuid. */
   async function getMeeting(id: string): Promise<Meeting | null> {
-    if (!UUID_PATTERN.test(id)) return null;
-
-    const meeting = await db.query.meetings.findFirst({
-      where: eq(meetings.id, id),
-      with: { speakers: { orderBy: asc(speakers.position) } },
-    });
-    return meeting ? validateStoredTranscript(meeting) : null;
+    return findMeeting(db, id);
   }
 
   /** Cheap enough to poll every couple of seconds. `null` when `id` is unknown. */
@@ -274,20 +287,40 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       .orderBy(desc(meetings.createdAt), desc(meetings.id));
   }
 
-  async function requireMeeting(id: string): Promise<Meeting> {
-    const meeting = await getMeeting(id);
+  async function findMeeting(
+    tx: Executor,
+    id: string,
+  ): Promise<Meeting | null> {
+    if (!UUID_PATTERN.test(id)) return null;
+
+    const meeting = await tx.query.meetings.findFirst({
+      where: eq(meetings.id, id),
+      with: { speakers: { orderBy: asc(speakers.position) } },
+    });
+    return meeting ? validateStoredTranscript(meeting) : null;
+  }
+
+  async function requireMeeting(tx: Executor, id: string): Promise<Meeting> {
+    const meeting = await findMeeting(tx, id);
     if (!meeting) throw new MeetingNotFoundError(id);
     return meeting;
   }
 
-  async function withSpeakers(
-    row: typeof meetings.$inferSelect,
+  /**
+   * Resolves a conditional update: the updated row when the guard matched, otherwise the
+   * Meeting as it currently is (or not found). Keeps every state transition race-safe.
+   */
+  async function afterGuardedUpdate(
+    tx: Executor,
+    id: string,
+    updated: typeof meetings.$inferSelect | undefined,
   ): Promise<Meeting> {
-    const list = await db.query.speakers.findMany({
-      where: eq(speakers.meetingId, row.id),
+    if (!updated) return requireMeeting(tx, id);
+    const list = await tx.query.speakers.findMany({
+      where: eq(speakers.meetingId, id),
       orderBy: asc(speakers.position),
     });
-    return validateStoredTranscript({ ...row, speakers: list });
+    return validateStoredTranscript({ ...updated, speakers: list });
   }
 
   /** ADR-0005: non-sample Meetings created in the trailing 24 h must stay below the cap. */
@@ -320,6 +353,8 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 }
 
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/** Anything queries can run on: the shared handle or an open transaction. */
+type Executor = Db | Transaction;
 
 export type MeetingService = ReturnType<typeof createMeetingService>;
 

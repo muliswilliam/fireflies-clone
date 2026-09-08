@@ -294,6 +294,34 @@ describe("Meeting service", () => {
       expect(second).toEqual(first);
     });
 
+    it("runs the provider once when two runs race for the same Meeting", async () => {
+      let calls = 0;
+      const counting: TranscriptionProvider = {
+        generateTranscript: async (input) => {
+          calls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return createFakeTranscriptionProvider().generateTranscript(input);
+        },
+      };
+      const racing = createMeetingService(db, {
+        transcriptionProvider: counting,
+        maxMeetingsPerDay: 3,
+        now: () => now,
+      });
+      const stopped = await stoppedMeeting();
+
+      const results = await Promise.all([
+        racing.processMeeting(stopped.id),
+        racing.processMeeting(stopped.id),
+      ]);
+
+      expect(calls).toBe(1);
+      expect(results.some((meeting) => meeting.status === "ready")).toBe(true);
+      await expect(service.getMeeting(stopped.id)).resolves.toMatchObject({
+        status: "ready",
+      });
+    });
+
     it("does nothing while the Recording is still running", async () => {
       const created = await service.createMeeting({
         title: "Standup",

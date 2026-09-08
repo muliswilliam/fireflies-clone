@@ -4,7 +4,7 @@ import { Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
-import { stopRecordingAction } from "@/app/meetings/[id]/actions";
+import { stopRecordingAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp } from "@/lib/format";
 

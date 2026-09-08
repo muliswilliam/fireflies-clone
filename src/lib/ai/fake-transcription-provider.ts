@@ -3,6 +3,7 @@ import type { Transcript, Utterance } from "@/lib/meetings/transcript";
 import type {
   TranscriptionInput,
   TranscriptionProvider,
+  TranscriptionSpeaker,
 } from "./transcription-provider";
 
 /**
@@ -19,20 +20,24 @@ export function createFakeTranscriptionProvider(): TranscriptionProvider {
 }
 
 export function generateFakeTranscript(input: TranscriptionInput): Transcript {
-  const random = seededRandom(
-    hashString(
-      JSON.stringify([
-        input.title,
-        input.agenda,
-        input.speakers.map((speaker) => speaker.id),
-        input.durationMs,
-        input.targetUtteranceCount,
-      ]),
+  const dialogue: Dialogue = {
+    random: seededRandom(
+      hashString(
+        JSON.stringify([
+          input.title,
+          input.agenda,
+          input.speakers.map((speaker) => speaker.id),
+          input.durationMs,
+          input.targetUtteranceCount,
+        ]),
+      ),
     ),
-  );
+    topics: topicsFrom(input),
+    speakers: input.speakers,
+  };
+  const { random } = dialogue;
   const count = input.targetUtteranceCount;
   const slotMs = input.durationMs / count;
-  const topics = topicsFrom(input);
 
   const utterances: Utterance[] = [];
   let previousSpeaker = -1;
@@ -56,7 +61,7 @@ export function generateFakeTranscript(input: TranscriptionInput): Transcript {
       speakerId: input.speakers[speakerIndex].id,
       startMs,
       endMs: Math.max(startMs, endMs),
-      text: sentenceFor(random, index, count, topics, input, speakerIndex),
+      text: sentenceFor(dialogue, { index, count, speakerIndex }),
     });
   }
 
@@ -64,6 +69,16 @@ export function generateFakeTranscript(input: TranscriptionInput): Transcript {
 }
 
 type Topics = { subject: string; points: string[] };
+
+/** Everything the sentence generator needs about the Meeting, fixed for one Transcript. */
+type Dialogue = {
+  random: () => number;
+  topics: Topics;
+  speakers: TranscriptionSpeaker[];
+};
+
+/** Where in the Transcript a sentence sits and who is saying it. */
+type Turn = { index: number; count: number; speakerIndex: number };
 
 function topicsFrom(input: TranscriptionInput): Topics {
   const points = (input.agenda ?? "")
@@ -83,7 +98,7 @@ const OPENERS = [
 ];
 
 const CLOSERS = [
-  "Good session. I'll send the notes around this afternoon.",
+  "Good meeting. I'll send the Summary around this afternoon.",
   "That's everything on my list. Thanks all, talk soon.",
   "Let's wrap there. Same time next week to check progress.",
 ];
@@ -106,31 +121,16 @@ const TEMPLATES = [
   "Makes sense. I'll draft a short proposal for {point} by tomorrow.",
 ];
 
-function sentenceFor(
-  random: () => number,
-  index: number,
-  count: number,
-  topics: Topics,
-  input: TranscriptionInput,
-  speakerIndex: number,
-): string {
+function sentenceFor(dialogue: Dialogue, turn: Turn): string {
+  const { index, count, speakerIndex } = turn;
+  const { topics, speakers } = dialogue;
   const template = pick(
-    random,
+    dialogue.random,
     index === 0 ? OPENERS : index === count - 1 ? CLOSERS : TEMPLATES,
   );
-  return fill(template, topics, input, speakerIndex, index);
-}
-
-function fill(
-  template: string,
-  topics: Topics,
-  input: TranscriptionInput,
-  speakerIndex: number,
-  index: number,
-): string {
   // Name another Speaker, never the one talking.
-  const others = input.speakers.filter((_, index) => index !== speakerIndex);
-  const named = others[speakerIndex % others.length] ?? input.speakers[0];
+  const others = speakers.filter((_, position) => position !== speakerIndex);
+  const named = others[speakerIndex % others.length] ?? speakers[0];
   // Agenda items are quoted so a verb phrase like "pick a launch date" still reads naturally.
   const point = topics.points[(index + speakerIndex) % topics.points.length];
   return template

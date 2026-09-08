@@ -12,8 +12,5 @@ export const SPEAKER_PALETTE = [
 ] as const;
 
 export function speakerColor(position: number) {
-  return SPEAKER_PALETTE[
-    ((position % SPEAKER_PALETTE.length) + SPEAKER_PALETTE.length) %
-      SPEAKER_PALETTE.length
-  ];
+  return SPEAKER_PALETTE[position % SPEAKER_PALETTE.length];
 }
