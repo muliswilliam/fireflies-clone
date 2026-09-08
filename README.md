@@ -32,7 +32,7 @@ The compose Postgres is published on host port 5433 so it never collides with a 
 | `pnpm build`      | Production build (Next standalone output)           |
 | `pnpm start`      | Serve the production build                          |
 | `pnpm db:migrate` | Apply Drizzle SQL migrations from `drizzle/`        |
-| `pnpm db:generate`| Generate a migration from `src/lib/db/schema.ts`    |
+| `pnpm db:generate` | Generate a migration from `src/lib/db/schema.ts`   |
 
 Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the database answers, `503` otherwise.
 
@@ -62,7 +62,7 @@ The multi-stage image runs migrations on start, then the Next standalone server.
 
 ## Deploy
 
-Dokploy at `fireflies.williammuli.dev`, auto-deploying from `main`. Details in `docs/submission.md` (to come).
+Dokploy at `fireflies.williammuli.dev`, auto-deploying from `main`. Deployment is set up in #11 and documented in `docs/submission.md` in #12.
 
 ## Third-party tools
 

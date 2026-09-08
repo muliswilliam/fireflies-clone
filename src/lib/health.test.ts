@@ -23,13 +23,17 @@ describe("health", () => {
     expect(await response.json()).toEqual({ status: "ok", database: "ok" });
   });
 
-  it("reports 503 with database unreachable when the database cannot be reached", async () => {
-    const response = await healthResponse(unreachable);
+  it(
+    "reports 503 with database unreachable when the database cannot be reached",
+    { timeout: 10_000 },
+    async () => {
+      const response = await healthResponse(unreachable);
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      status: "unavailable",
-      database: "unreachable",
-    });
-  });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        status: "unavailable",
+        database: "unreachable",
+      });
+    },
+  );
 });

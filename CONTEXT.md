@@ -1,4 +1,4 @@
-# Fireflies Clone
+# Firefly Notes
 
 A simplified replica of Fireflies.ai: record a meeting, produce a transcript, and distill it into a summary with action items. Single shared workspace, no user accounts.
 

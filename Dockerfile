@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM node:24-alpine AS base
-RUN npm install --global pnpm@11
+RUN npm install --global pnpm@11.22.0
 WORKDIR /app
 
 # Install dependencies once, cached on the lockfile.
