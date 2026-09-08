@@ -2,13 +2,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 
+import {
+  describeFirstIssue,
+  type ProviderDocument,
+} from "@/lib/meetings/provider-output";
+
 /** Beta header for `fallbacks: "default"`: a refusal is re-run server-side on Anthropic's recommended model. */
 export const SERVER_SIDE_FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
-/** Which Meeting document a request produces; only used to word errors. */
-export type ProviderDocument = "Transcript" | "Summary";
-
 export type StructuredRequest<T> = {
+  /** Which Meeting document the answer is; only used to word errors. */
   document: ProviderDocument;
   system: string;
   prompt: string;
@@ -108,10 +111,8 @@ function parseStructuredOutput<T>(
 
   const result = request.schema.safeParse(json);
   if (!result.success) {
-    const issue = result.error.issues[0];
-    const where = issue?.path.length ? ` at ${issue.path.join(".")}` : "";
     throw new ClaudeProviderError(
-      `Claude returned an invalid ${document}: ${issue?.message ?? "unknown issue"}${where}`,
+      `Claude returned an invalid ${document}: ${describeFirstIssue(result.error)}`,
     );
   }
   return result.data;

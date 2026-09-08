@@ -58,6 +58,17 @@ describe("server environment", () => {
     ).toThrowError(/ANTHROPIC_API_KEY is required/);
   });
 
+  it("treats blank values as unset, so a copied .env.example still gets defaults", () => {
+    const env = parseServerEnv({
+      DATABASE_URL,
+      AI_PROVIDER: "",
+      AI_MODEL: "",
+      NODE_ENV: "test",
+    });
+    expect(env.AI_PROVIDER).toBe("fake");
+    expect(env.AI_MODEL).toBe("claude-opus-5");
+  });
+
   it("does not require ANTHROPIC_API_KEY for the fake provider", () => {
     expect(() =>
       parseServerEnv({ DATABASE_URL, AI_PROVIDER: "fake" }),

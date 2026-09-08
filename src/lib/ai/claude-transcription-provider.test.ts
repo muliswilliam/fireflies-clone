@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { StructuredRequest } from "@/lib/ai/claude-structured-generator";
 import { createClaudeTranscriptionProvider } from "@/lib/ai/claude-transcription-provider";
 import type { TranscriptionInput } from "@/lib/ai/transcription-provider";
 import type { Transcript } from "@/lib/meetings/transcript";
+
+import { generatorAnswering } from "../../../tests/structured-generator-stub";
 
 const SPEAKERS = [
   { id: "11111111-1111-4111-8111-111111111111", name: "Amara Okafor" },
@@ -26,20 +27,6 @@ const TRANSCRIPT: Transcript = {
     { speakerId: SPEAKERS[2].id, startMs: 9_500, endMs: 12_000, text: "Hey." },
   ],
 };
-
-/** A generator that records the request and answers with `output`. */
-function generatorAnswering(output: unknown) {
-  const requests: StructuredRequest<unknown>[] = [];
-  return {
-    requests,
-    generator: {
-      async generate<T>(request: StructuredRequest<T>): Promise<T> {
-        requests.push(request);
-        return output as T;
-      },
-    },
-  };
-}
 
 describe("Claude TranscriptionProvider", () => {
   it("returns the generated Transcript", async () => {
@@ -112,5 +99,17 @@ describe("Claude TranscriptionProvider", () => {
         utterances: [TRANSCRIPT.utterances[1], TRANSCRIPT.utterances[0]],
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects a Transcript in which a Speaker never says anything", async () => {
+    const { generator, requests } = generatorAnswering(TRANSCRIPT);
+    await createClaudeTranscriptionProvider(generator).generateTranscript(
+      INPUT,
+    );
+    const result = requests[0].schema.safeParse({
+      utterances: TRANSCRIPT.utterances.slice(0, 2),
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toMatch(/every Speaker/);
   });
 });

@@ -1,6 +1,10 @@
 import { formatTimestamp } from "@/lib/format";
-import { transcriptSchemaFor } from "@/lib/meetings/transcript";
+import {
+  transcriptSchemaFor,
+  type Transcript,
+} from "@/lib/meetings/transcript";
 
+import { speakerList } from "./claude-prompt";
 import type { ClaudeStructuredGenerator } from "./claude-structured-generator";
 import type {
   TranscriptionInput,
@@ -28,25 +32,36 @@ export function createClaudeTranscriptionProvider(
         document: "Transcript",
         system: SYSTEM,
         prompt: transcriptPrompt(input),
-        schema: transcriptSchemaFor({
-          durationMs: input.durationMs,
-          speakerIds: input.speakers.map((speaker) => speaker.id),
-        }),
+        schema: claudeTranscriptSchemaFor(input),
         maxTokens: MAX_TOKENS,
       });
     },
   };
 }
 
+/** The Meeting's Transcript rules plus what the prompt asks of Claude: every Speaker gets a turn. */
+export function claudeTranscriptSchemaFor(input: TranscriptionInput) {
+  const speakerIds = input.speakers.map((speaker) => speaker.id);
+  return transcriptSchemaFor({
+    durationMs: input.durationMs,
+    speakerIds,
+  }).refine(
+    (transcript: Transcript) => {
+      const heard = new Set(
+        transcript.utterances.map((utterance) => utterance.speakerId),
+      );
+      return speakerIds.every((id) => heard.has(id));
+    },
+    { message: "Not every Speaker in the Meeting says anything" },
+  );
+}
+
 export function transcriptPrompt(input: TranscriptionInput): string {
-  const speakers = input.speakers
-    .map((speaker) => `- ${speaker.name} (speakerId: ${speaker.id})`)
-    .join("\n");
   return `Meeting title: ${input.title}
 Agenda: ${input.agenda ?? "none given; infer a plausible agenda from the title"}
 Recording duration: ${formatTimestamp(input.durationMs)} (${input.durationMs} ms)
 Speakers:
-${speakers}
+${speakerList(input.speakers)}
 
 Produce exactly ${input.targetUtteranceCount} Utterances covering the whole Recording.
 

@@ -50,7 +50,7 @@ function selectTranscriptionProvider(): TranscriptionProvider {
     case "fake":
       return createFakeTranscriptionProvider();
     case "claude":
-      return createClaudeTranscriptionProvider(getClaudeGenerator());
+      return createClaudeTranscriptionProvider(createClaudeGenerator());
   }
 }
 
@@ -59,18 +59,15 @@ function selectSummarizationProvider(): SummarizationProvider {
     case "fake":
       return createFakeSummarizationProvider();
     case "claude":
-      return createClaudeSummarizationProvider(getClaudeGenerator());
+      return createClaudeSummarizationProvider(createClaudeGenerator());
   }
 }
 
-let claudeGenerator: ClaudeStructuredGenerator | undefined;
-
-/** One Claude client for both providers. `getEnv` has already insisted on the key when the provider is `claude`. */
-function getClaudeGenerator(): ClaudeStructuredGenerator {
+/** `getEnv` has already insisted on the key when the provider is `claude`. */
+function createClaudeGenerator(): ClaudeStructuredGenerator {
   const env = getEnv();
-  claudeGenerator ??= createClaudeStructuredGenerator({
+  return createClaudeStructuredGenerator({
     client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
     model: env.AI_MODEL,
   });
-  return claudeGenerator;
 }

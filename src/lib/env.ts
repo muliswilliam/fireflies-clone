@@ -5,13 +5,6 @@ export type AiProvider = (typeof AI_PROVIDERS)[number];
 
 export const DEFAULT_AI_MODEL = "claude-opus-5";
 
-/** A blank value in `.env` (`ANTHROPIC_API_KEY=`) means "not set", not "the empty string". */
-const optionalSecret = z
-  .string()
-  .trim()
-  .optional()
-  .transform((value) => (value ? value : undefined));
-
 const serverEnvSchema = z
   .object({
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
@@ -20,7 +13,7 @@ const serverEnvSchema = z
     /** Claude model id used by the `claude` provider. */
     AI_MODEL: z.string().trim().min(1).default(DEFAULT_AI_MODEL),
     /** Required by the `claude` provider; ignored by `fake`. */
-    ANTHROPIC_API_KEY: optionalSecret,
+    ANTHROPIC_API_KEY: z.string().optional(),
     /** Global cap on non-sample Meetings created in any rolling 24 hours (ADR-0005). */
     MAX_MEETINGS_PER_DAY: z.coerce.number().int().positive().default(50),
     /** Test only: lets a Meeting title ask a provider to fail once (`src/lib/ai/fault-injection.ts`). */
@@ -40,17 +33,21 @@ const serverEnvSchema = z
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 
 /**
- * Parses server environment from `source` (normally `process.env`).
+ * Parses server environment from `source` (normally `process.env`). A blank value, as in
+ * `ANTHROPIC_API_KEY=` left over from `.env.example`, counts as not set.
  * `AI_PROVIDER` defaults to `claude`, except under `NODE_ENV=test` where it is `fake` so
- * tests and e2e never pay for Claude unless they ask to. Throws with every broken variable named.
+ * tests and e2e never pay for Claude unless they ask to. Throws naming what is wrong.
  */
 export function parseServerEnv(
   source: Record<string, string | undefined>,
 ): ServerEnv {
+  const set = Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value?.trim()),
+  );
   const result = serverEnvSchema.safeParse({
-    ...source,
+    ...set,
     AI_PROVIDER:
-      source.AI_PROVIDER ?? (source.NODE_ENV === "test" ? "fake" : "claude"),
+      set.AI_PROVIDER ?? (set.NODE_ENV === "test" ? "fake" : "claude"),
   });
   if (!result.success) {
     throw new Error(

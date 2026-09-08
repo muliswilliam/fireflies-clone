@@ -31,6 +31,7 @@ import {
   MeetingNotFailedError,
   MeetingNotFoundError,
 } from "./errors";
+import { describeFirstIssue, type ProviderDocument } from "./provider-output";
 import {
   summarizationOutputSchemaFor,
   summarySchema,
@@ -662,15 +663,14 @@ function validateStoredDocuments<M extends Meeting>(meeting: M): M {
 
 /** Runs a provider's answer through its schema; anything the schema rejects is a provider error. */
 function validateProviderOutput<T>(
-  document: "Transcript" | "Summary",
+  document: ProviderDocument,
   schema: { safeParse: (value: unknown) => z.ZodSafeParseResult<T> },
   generated: unknown,
 ): T {
   const result = schema.safeParse(generated);
   if (!result.success) {
-    const issue = result.error.issues[0];
     throw new Error(
-      `The provider returned an invalid ${document}: ${issue?.message ?? "unknown issue"}`,
+      `The provider returned an invalid ${document}: ${describeFirstIssue(result.error)}`,
     );
   }
   return result.data;

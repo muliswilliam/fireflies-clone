@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { StructuredRequest } from "@/lib/ai/claude-structured-generator";
 import { createClaudeSummarizationProvider } from "@/lib/ai/claude-summarization-provider";
 import type { SummarizationInput } from "@/lib/ai/summarization-provider";
 import type { SummarizationOutput } from "@/lib/meetings/summary";
+
+import { generatorAnswering } from "../../../tests/structured-generator-stub";
 
 const SPEAKERS = [
   { id: "11111111-1111-4111-8111-111111111111", name: "Amara Okafor" },
@@ -43,19 +44,6 @@ const OUTPUT: SummarizationOutput = {
     },
   ],
 };
-
-function generatorAnswering(output: unknown) {
-  const requests: StructuredRequest<unknown>[] = [];
-  return {
-    requests,
-    generator: {
-      async generate<T>(request: StructuredRequest<T>): Promise<T> {
-        requests.push(request);
-        return output as T;
-      },
-    },
-  };
-}
 
 describe("Claude SummarizationProvider", () => {
   it("returns the generated Summary and Action Items", async () => {

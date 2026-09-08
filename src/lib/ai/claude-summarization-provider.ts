@@ -6,6 +6,7 @@ import {
   summarizationOutputSchemaFor,
 } from "@/lib/meetings/summary";
 
+import { speakerList } from "./claude-prompt";
 import type { ClaudeStructuredGenerator } from "./claude-structured-generator";
 import type {
   SummarizationInput,
@@ -45,9 +46,6 @@ export function summaryPrompt(input: SummarizationInput): string {
   const nameById = new Map(
     input.speakers.map((speaker) => [speaker.id, speaker.name]),
   );
-  const speakers = input.speakers
-    .map((speaker) => `- ${speaker.name} (speakerId: ${speaker.id})`)
-    .join("\n");
   const transcript = input.transcript.utterances
     .map(
       (utterance) =>
@@ -57,7 +55,7 @@ export function summaryPrompt(input: SummarizationInput): string {
   return `Meeting title: ${input.title}
 Agenda: ${input.agenda ?? "none given"}
 Speakers:
-${speakers}
+${speakerList(input.speakers)}
 
 Transcript:
 ${transcript}
@@ -65,5 +63,5 @@ ${transcript}
 Return:
 - overview: two to four sentences on what the Meeting was about and what came out of it, in plain prose.
 - keyTakeaways: ${MIN_KEY_TAKEAWAYS} to ${MAX_KEY_TAKEAWAYS} points, each one complete sentence stating a decision, finding, or open question, in the order they came up.
-- actionItems: up to ${MAX_ACTION_ITEMS} concrete follow-ups that were actually agreed, each phrased as a task ("Draft the launch plan"). ownerSpeakerId is the speakerId of the Speaker who took it on, or null when nobody did. dueDate is the timing as said in the Transcript ("Friday", "end of Q3"), or null when none was given. Return an empty list when nothing was agreed.`;
+- actionItems: up to ${MAX_ACTION_ITEMS} concrete follow-ups that were actually agreed, each phrased as an instruction ("Draft the launch plan"). ownerSpeakerId is the speakerId of the Speaker who took it on, or null when nobody did. dueDate is the timing as said in the Transcript ("Friday", "end of Q3"), or null when none was given. Return an empty list when nothing was agreed.`;
 }
