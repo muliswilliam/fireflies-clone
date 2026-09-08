@@ -10,13 +10,16 @@ import type { TranscriptionProvider } from "./transcription-provider";
  * provider for that step throw the first time it is asked about that title. The next call
  * (a Retry) goes through, so an end-to-end test can watch a Meeting fail and then recover
  * without any other channel into the server. Never enabled outside tests.
+ *
+ * "Once" is remembered inside the provider instance, which lives as long as the cached
+ * Meeting service does; a dev-server hot reload forgets it and the next call fails again.
  */
 
-const DIRECTIVE = /\[fail:([a-z]+)\]/;
+const MARKER = /\[fail:([a-z]+)\]/;
 
 /** The step a title asks to fail, or `null` when the title carries no (valid) marker. */
-export function failureDirectiveIn(title: string): ProcessingStep | null {
-  const step = DIRECTIVE.exec(title)?.[1];
+export function failureMarkerIn(title: string): ProcessingStep | null {
+  const step = MARKER.exec(title)?.[1];
   return step && isProcessingStep(step) ? step : null;
 }
 
@@ -28,12 +31,13 @@ function isProcessingStep(value: string): value is ProcessingStep {
 function createOnceGate(step: ProcessingStep) {
   const failedTitles = new Set<string>();
   return function throwIfDue(title: string): void {
-    if (failureDirectiveIn(title) !== step || failedTitles.has(title)) return;
+    if (failureMarkerIn(title) !== step || failedTitles.has(title)) return;
     failedTitles.add(title);
     throw new Error(`Injected ${step} failure for "${title}"`);
   };
 }
 
+/** Fails `generateTranscript` once for every title marked `[fail:transcribing]`. */
 export function withTranscriptionFaultInjection(
   provider: TranscriptionProvider,
 ): TranscriptionProvider {
@@ -46,6 +50,7 @@ export function withTranscriptionFaultInjection(
   };
 }
 
+/** Fails `summarize` once for every title marked `[fail:summarizing]`. */
 export function withSummarizationFaultInjection(
   provider: SummarizationProvider,
 ): SummarizationProvider {
@@ -55,19 +60,5 @@ export function withSummarizationFaultInjection(
       throwIfDue(input.title);
       return provider.summarize(input);
     },
-  };
-}
-
-export function withFaultInjection(providers: {
-  transcriptionProvider: TranscriptionProvider;
-  summarizationProvider: SummarizationProvider;
-}) {
-  return {
-    transcriptionProvider: withTranscriptionFaultInjection(
-      providers.transcriptionProvider,
-    ),
-    summarizationProvider: withSummarizationFaultInjection(
-      providers.summarizationProvider,
-    ),
   };
 }

@@ -18,6 +18,7 @@ import type { Db } from "@/lib/db/client";
 import {
   actionItems,
   meetings,
+  meetingStatusEnum,
   speakers,
   type FailedStep,
   type MeetingStatus,
@@ -41,6 +42,8 @@ import {
   transcriptSchemaFor,
   type Transcript,
 } from "./transcript";
+import { formatDuration } from "@/lib/format";
+
 import { validateMeetingInput } from "./validation";
 import type { z } from "zod";
 
@@ -184,8 +187,8 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 
   /**
    * Runs the remaining processing steps for a Meeting, in order: transcribing, then summarizing.
-   * This is the only writer of processing Status transitions apart from create, stop and
-   * `regenerateSummary`. Idempotent: a Meeting that is not in-flight is returned unchanged.
+   * This is the only writer of processing Status transitions apart from create, stop,
+   * `regenerateSummary` and `retryMeeting`. Idempotent: a Meeting that is not in-flight is returned unchanged.
    * Provider failures never throw; they leave the Meeting `failed` at the step that broke.
    */
   async function processMeeting(id: string): Promise<Meeting> {
@@ -440,7 +443,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     const [updated] = await db
       .update(meetings)
       .set({
-        status: sql`${meetings.failedStep}::text::meeting_status`,
+        status: sql`${meetings.failedStep}::text::${sql.identifier(meetingStatusEnum.enumName)}`,
         failedStep: null,
         errorMessage: null,
         updatedAt: now(),
@@ -625,7 +628,12 @@ function withTimeout<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`The ${provider} did not answer within ${ms} ms`)),
+      () =>
+        reject(
+          new Error(
+            `The ${provider} did not answer within ${formatDuration(ms)}`,
+          ),
+        ),
       ms,
     );
     promise.then(resolve, reject).finally(() => clearTimeout(timer));

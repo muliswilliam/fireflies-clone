@@ -553,7 +553,7 @@ describe("Meeting service", () => {
       };
       const impatient = serviceWith({
         transcriptionProvider: hanging,
-        providerTimeoutMs: 50,
+        providerTimeoutMs: 1_000,
       });
       const stopped = await stoppedMeeting();
 
@@ -564,7 +564,7 @@ describe("Meeting service", () => {
         failedStep: "transcribing",
         transcript: null,
       });
-      expect(processed.errorMessage).toMatch(/did not answer within 50 ms/);
+      expect(processed.errorMessage).toMatch(/did not answer within 1 s/);
     });
 
     it("marks the Meeting failed at summarizing when the provider does not answer in time", async () => {
@@ -573,7 +573,7 @@ describe("Meeting service", () => {
       };
       const impatient = serviceWith({
         summarizationProvider: hanging,
-        providerTimeoutMs: 50,
+        providerTimeoutMs: 1_000,
       });
       const stopped = await stoppedMeeting();
 
@@ -585,7 +585,7 @@ describe("Meeting service", () => {
         summary: null,
       });
       expect(processed.transcript).not.toBeNull();
-      expect(processed.errorMessage).toMatch(/did not answer within 50 ms/);
+      expect(processed.errorMessage).toMatch(/did not answer within 1 s/);
     });
   });
 

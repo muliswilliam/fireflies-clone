@@ -16,12 +16,10 @@ export function FailedBanner({
   errorMessage,
 }: {
   meetingId: string;
-  failedStep: FailedStep | null;
+  failedStep: FailedStep;
   errorMessage: string | null;
 }) {
   const [pending, startTransition] = useTransition();
-  // The schema guarantees failed_step is set whenever status is failed.
-  const step = failedStep ?? "transcribing";
 
   function retry() {
     startTransition(async () => {
@@ -43,13 +41,13 @@ export function FailedBanner({
         />
         <div className="min-w-0">
           <p className="text-destructive font-medium">
-            {MEETING_STATUS_LABELS[step]} failed
+            {MEETING_STATUS_LABELS[failedStep]} failed
           </p>
           <p className="text-muted-foreground mt-1 leading-6 break-words">
             {errorMessage ?? "Processing stopped without saying why."}
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
-            {step === "summarizing"
+            {failedStep === "summarizing"
               ? "Retry keeps the Transcript and only summarizes again."
               : "Retry transcribes the Recording again, then summarizes."}
           </p>

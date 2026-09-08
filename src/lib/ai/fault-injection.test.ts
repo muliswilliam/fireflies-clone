@@ -6,8 +6,8 @@ import {
   generateFakeTranscript,
 } from "./fake-transcription-provider";
 import {
-  failureDirectiveIn,
-  withFaultInjection,
+  failureMarkerIn,
+  withSummarizationFaultInjection,
   withTranscriptionFaultInjection,
 } from "./fault-injection";
 import type { SummarizationInput } from "./summarization-provider";
@@ -37,18 +37,16 @@ function summarizationInput(title: string): SummarizationInput {
   };
 }
 
-describe("failureDirectiveIn", () => {
+describe("failureMarkerIn", () => {
   it("reads the step to fail from a [fail:<step>] marker anywhere in the title", () => {
-    expect(failureDirectiveIn("Sync [fail:transcribing]")).toBe("transcribing");
-    expect(failureDirectiveIn("[fail:summarizing] Sync 42")).toBe(
-      "summarizing",
-    );
+    expect(failureMarkerIn("Sync [fail:transcribing]")).toBe("transcribing");
+    expect(failureMarkerIn("[fail:summarizing] Sync 42")).toBe("summarizing");
   });
 
   it("ignores titles without a marker or with an unknown step", () => {
-    expect(failureDirectiveIn("Q3 roadmap sync")).toBeNull();
-    expect(failureDirectiveIn("Sync [fail:recording]")).toBeNull();
-    expect(failureDirectiveIn("Sync [fail]")).toBeNull();
+    expect(failureMarkerIn("Q3 roadmap sync")).toBeNull();
+    expect(failureMarkerIn("Sync [fail:recording]")).toBeNull();
+    expect(failureMarkerIn("Sync [fail]")).toBeNull();
   });
 });
 
@@ -96,24 +94,26 @@ describe("withTranscriptionFaultInjection", () => {
   });
 });
 
-describe("withFaultInjection", () => {
-  it("wraps both providers, each failing once for its own step", async () => {
-    const { transcriptionProvider, summarizationProvider } = withFaultInjection(
-      {
-        transcriptionProvider: createFakeTranscriptionProvider(),
-        summarizationProvider: createFakeSummarizationProvider(),
-      },
+describe("withSummarizationFaultInjection", () => {
+  it("fails the first call for a marked title, then passes the next one through", async () => {
+    const provider = withSummarizationFaultInjection(
+      createFakeSummarizationProvider(),
     );
-    const title = "Sync [fail:summarizing]";
+    const input = summarizationInput("Sync [fail:summarizing]");
+
+    await expect(provider.summarize(input)).rejects.toThrow(
+      /Injected summarizing failure/,
+    );
+    await expect(provider.summarize(input)).resolves.toBeDefined();
+  });
+
+  it("leaves a title marked for transcribing alone", async () => {
+    const provider = withSummarizationFaultInjection(
+      createFakeSummarizationProvider(),
+    );
 
     await expect(
-      transcriptionProvider.generateTranscript(transcriptionInput(title)),
-    ).resolves.toBeDefined();
-    await expect(
-      summarizationProvider.summarize(summarizationInput(title)),
-    ).rejects.toThrow(/Injected summarizing failure/);
-    await expect(
-      summarizationProvider.summarize(summarizationInput(title)),
+      provider.summarize(summarizationInput("Sync [fail:transcribing]")),
     ).resolves.toBeDefined();
   });
 });

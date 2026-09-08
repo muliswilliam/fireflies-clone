@@ -79,7 +79,7 @@ export function StatusStepper({
           <li
             key={step}
             data-step={step}
-            data-step-state={state}
+            data-step-progress={state}
             aria-current={
               state === "current" || state === "failed" ? "step" : undefined
             }

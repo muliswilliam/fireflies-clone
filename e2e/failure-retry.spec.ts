@@ -31,20 +31,20 @@ test("a summarizing failure shows the step and reason, keeps the Transcript, and
     hasText: "Summarizing",
   });
   await expect(failedStep).toHaveAttribute("aria-current", "step");
-  await expect(failedStep).toHaveAttribute("data-step-state", "failed");
+  await expect(failedStep).toHaveAttribute("data-step-progress", "failed");
   await expect(
     stepper.getByRole("listitem").filter({ hasText: "Transcribing" }),
-  ).toHaveAttribute("data-step-state", "complete");
+  ).toHaveAttribute("data-step-progress", "complete");
 
   const banner = page.getByRole("alert", { name: "Processing failed" });
   await expect(banner).toContainText("Summarizing failed");
   await expect(banner).toContainText("Injected summarizing failure");
   await expect(page.getByText("Failed", { exact: true })).toBeVisible();
 
-  // Polling stops on a terminal Status.
+  // Polling stops on a terminal Status: after the poll that saw `failed`, no more requests.
   const failedAt = Date.now();
-  await page.waitForTimeout(4_500);
-  expect(statusRequests.filter((at) => at > failedAt + 500)).toEqual([]);
+  await page.waitForTimeout(5_000);
+  expect(statusRequests.filter((at) => at > failedAt + 1_000)).toEqual([]);
 
   // The Transcript survived; the Summary tab explains what is missing.
   await expect(
@@ -86,7 +86,7 @@ test("a transcribing failure leaves no Transcript, and Retry runs the whole pipe
   });
   await expect(
     stepper.getByRole("listitem").filter({ hasText: "Transcribing" }),
-  ).toHaveAttribute("data-step-state", "failed");
+  ).toHaveAttribute("data-step-progress", "failed");
   const banner = page.getByRole("alert", { name: "Processing failed" });
   await expect(banner).toContainText("Transcribing failed");
   await expect(page.getByText("No Transcript yet.")).toBeVisible();

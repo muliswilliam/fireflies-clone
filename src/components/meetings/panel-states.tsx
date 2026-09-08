@@ -38,15 +38,15 @@ export function FailedPanel({
   failedStep,
 }: {
   document: "Transcript" | "Summary" | "Action Items";
-  failedStep: FailedStep | null;
+  failedStep: FailedStep;
 }) {
   return (
     <div className="text-muted-foreground flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center text-sm">
       <AlertCircle aria-hidden="true" className="text-destructive size-5" />
       <p>
         <span className="text-foreground font-medium">No {document} yet.</span>{" "}
-        {MEETING_STATUS_LABELS[failedStep ?? "transcribing"]} failed; use Retry
-        above to pick up where processing stopped.
+        {MEETING_STATUS_LABELS[failedStep]} failed; use Retry above to pick up
+        where processing stopped.
       </p>
     </div>
   );

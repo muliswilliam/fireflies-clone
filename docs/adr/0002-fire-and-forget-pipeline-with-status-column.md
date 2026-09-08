@@ -2,7 +2,7 @@
 
 Stopping a Recording triggers two Claude calls (transcription, then summarization) that take 10-25 seconds together. The request that stops the Recording returns immediately; the pipeline continues on the server via Next.js `after()`, advancing `meetings.status` through `transcribing`, `summarizing`, `ready`, or `failed`. The client polls status while processing. Each step is idempotent, so a `failed` Meeting can be retried from the step that failed.
 
-This is deliberately not a durable job queue. If the process restarts mid-pipeline the Meeting stays in its in-flight status until a user presses Retry. That is an accepted limitation for a demo with a ten-hour budget, and the README says so.
+This is deliberately not a durable job queue. Retry is offered only for a `failed` Meeting. If the process restarts mid-pipeline the Meeting stays in its in-flight status with no way to nudge it from the UI; that is an accepted limitation for a demo with a ten-hour budget, and the README says so.
 
 **Upgrade path**: pg-boss on the same Postgres, with the existing step functions as job handlers. The status column and idempotent steps already match what a queue needs.
 
