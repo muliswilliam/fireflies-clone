@@ -18,6 +18,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { Summary } from "@/lib/meetings/summary";
 import type { Transcript } from "@/lib/meetings/transcript";
 
 export const MEETING_STATUSES = [
@@ -53,9 +54,9 @@ export const meetings = pgTable(
       withTimezone: true,
     }).notNull(),
     recordingEndedAt: timestamp("recording_ended_at", { withTimezone: true }),
-    // Validated by Zod at the service boundary (ADR-0004). Summary shape arrives with #5.
+    // Both documents are validated by Zod at the service boundary (ADR-0004).
     transcript: jsonb("transcript").$type<Transcript>(),
-    summary: jsonb("summary"),
+    summary: jsonb("summary").$type<Summary>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -100,13 +101,57 @@ export const speakers = pgTable(
   ],
 );
 
+/**
+ * Action Items are rows rather than part of the Summary document because each one is toggled
+ * on its own and its owner is a foreign key to a Speaker (ADR-0004). Membership of the owner in
+ * this Meeting's Speakers is a service rule; the FK alone only guarantees the Speaker exists.
+ */
+export const actionItems = pgTable(
+  "action_items",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    ownerSpeakerId: uuid("owner_speaker_id").references(() => speakers.id, {
+      onDelete: "set null",
+    }),
+    text: text("text").notNull(),
+    /** Free-form text as the model wrote it ("Friday", "2026-10-01"); never parsed. */
+    dueDate: text("due_date"),
+    done: boolean("done").notNull().default(false),
+    /** Order within the Meeting's Action Items. */
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("action_items_meeting_id_position_idx").on(
+      table.meetingId,
+      table.position,
+    ),
+  ],
+);
+
 export const meetingsRelations = relations(meetings, ({ many }) => ({
   speakers: many(speakers),
+  actionItems: many(actionItems),
 }));
 
 export const speakersRelations = relations(speakers, ({ one }) => ({
   meeting: one(meetings, {
     fields: [speakers.meetingId],
     references: [meetings.id],
+  }),
+}));
+
+export const actionItemsRelations = relations(actionItems, ({ one }) => ({
+  meeting: one(meetings, {
+    fields: [actionItems.meetingId],
+    references: [meetings.id],
+  }),
+  owner: one(speakers, {
+    fields: [actionItems.ownerSpeakerId],
+    references: [speakers.id],
   }),
 }));

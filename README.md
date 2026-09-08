@@ -13,10 +13,11 @@ Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`
 - `/meetings/[id]` shows the Meeting, its Speakers and a Status stepper (Recording, Transcribing, Summarizing, Ready). While the Recording runs it shows a live timer, a pulsing indicator and a Stop button.
 - Stopping the Recording ends it and schedules processing after the response (ADR-0002). The page polls `GET /api/meetings/[id]/status` every 2 seconds and re-renders as the Status changes.
 - Processing asks the configured `TranscriptionProvider` (ADR-0001) for a Transcript sized to the Recording: one Utterance per 12 seconds, clamped to 8-80. The Transcript tab shows each Utterance with its Speaker (one colour per Speaker), an mm:ss timestamp that highlights the Utterance when clicked, and the text.
-- `AI_PROVIDER=fake` gives a deterministic, instant Transcript; tests and e2e always use it. The Claude provider arrives in #8, so until then `AI_PROVIDER=claude` leaves a stopped Meeting in `failed` with a message saying so.
+- Once the Transcript exists, processing continues into Summarizing: the configured `SummarizationProvider` returns an Overview, 3 to 7 Key Takeaways and up to 10 Action Items, each owned by one of the Meeting's Speakers or nobody, with an optional free-form due date. The Summary is JSONB on the Meeting; Action Items are rows (ADR-0004). The Summary tab shows the Overview and Key Takeaways; the Action Items tab lets you tick items done. Regenerate (with a warning that done state is lost) sends the Meeting back to Summarizing and replaces the Summary and Action Items atomically.
+- `AI_PROVIDER=fake` gives deterministic, instant Transcripts and Summaries; tests and e2e always use it. The Claude providers arrive in #8, so until then `AI_PROVIDER=claude` leaves a stopped Meeting in `failed` with a message saying so.
 - A global cap (`MAX_MEETINGS_PER_DAY`, default 50) limits Meetings created in any rolling 24 hours; Sample Meetings are exempt. See ADR-0005.
 
-Summary, Action Items, failure retry and Instant Meetings arrive in the following tickets.
+Failure retry, Instant Meetings, Markdown export and Sample Meetings arrive in the following tickets.
 
 ## Stack
 

@@ -55,6 +55,53 @@ test("record, stop, and read the Transcript", async ({ page }) => {
     "true",
   );
 
+  // The Summary tab: an Overview about this Meeting and its Key Takeaways.
+  await page.getByRole("tab", { name: "Summary" }).click();
+  const summary = page.getByRole("article", { name: "Summary" });
+  await expect(
+    summary.getByRole("heading", { name: "Overview" }),
+  ).toBeVisible();
+  await expect(summary).toContainText(title);
+  const takeaways = summary
+    .getByRole("list", { name: "Key Takeaways" })
+    .getByRole("listitem");
+  expect(await takeaways.count()).toBeGreaterThanOrEqual(3);
+
+  // The Action Items tab: toggle one done, and it stays done after a reload.
+  await page.getByRole("tab", { name: /Action items/ }).click();
+  const items = page
+    .getByRole("list", { name: "Action Items" })
+    .getByRole("listitem");
+  expect(await items.count()).toBeGreaterThanOrEqual(2);
+  await expect(items.first()).toContainText(
+    /Amara Okafor|Ben Liu|Chloe Martin/,
+  );
+  const firstCheckbox = items.first().getByRole("checkbox");
+  await expect(firstCheckbox).not.toBeChecked();
+  await firstCheckbox.click();
+  await expect(firstCheckbox).toBeChecked();
+  await expect(items.first()).toHaveAttribute("data-done", "true");
+  await expect(items.nth(1)).not.toHaveAttribute("data-done", "true");
+
+  await page.reload();
+  await page.getByRole("tab", { name: /Action items/ }).click();
+  await expect(items.first().getByRole("checkbox")).toBeChecked();
+  await expect(items.nth(1).getByRole("checkbox")).not.toBeChecked();
+
+  // Regenerating warns that done state is lost, runs summarizing again, and resets it.
+  await page.getByRole("tab", { name: "Summary" }).click();
+  await page.getByRole("button", { name: "Regenerate" }).click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Regenerate the Summary?",
+  });
+  await expect(dialog).toContainText(/marked done is lost/);
+  await dialog.getByRole("button", { name: "Regenerate" }).click();
+  await expect(stepper).toHaveAttribute("data-status", "ready", {
+    timeout: 15_000,
+  });
+  await page.getByRole("tab", { name: /Action items/ }).click();
+  await expect(items.first().getByRole("checkbox")).not.toBeChecked();
+
   // The list shows the finished Meeting with its duration.
   await page.getByRole("link", { name: "Meetings", exact: true }).click();
   const row = page.getByRole("link", { name: title });

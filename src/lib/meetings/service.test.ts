@@ -1,15 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createFakeSummarizationProvider } from "@/lib/ai/fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "@/lib/ai/fake-transcription-provider";
+import type { SummarizationProvider } from "@/lib/ai/summarization-provider";
 import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import { createDb } from "@/lib/db/client";
 import { meetings } from "@/lib/db/schema";
 import {
+  ActionItemNotFoundError,
   DailyCapReachedError,
   MeetingNotFoundError,
   MeetingValidationError,
 } from "@/lib/meetings/errors";
-import { createMeetingService } from "@/lib/meetings/service";
+import {
+  createMeetingService,
+  type MeetingServiceConfig,
+} from "@/lib/meetings/service";
 
 import { testDatabaseUrl } from "../../../tests/test-database";
 
@@ -18,11 +24,16 @@ const START = new Date("2026-09-08T10:00:00.000Z");
 describe("Meeting service", () => {
   const db = createDb(testDatabaseUrl());
   let now = START;
-  const service = createMeetingService(db, {
-    transcriptionProvider: createFakeTranscriptionProvider(),
-    maxMeetingsPerDay: 3,
-    now: () => now,
-  });
+  /** The service under test with any provider swapped out; everything else stays the same. */
+  const serviceWith = (overrides: Partial<MeetingServiceConfig> = {}) =>
+    createMeetingService(db, {
+      transcriptionProvider: createFakeTranscriptionProvider(),
+      summarizationProvider: createFakeSummarizationProvider(),
+      maxMeetingsPerDay: 3,
+      now: () => now,
+      ...overrides,
+    });
+  const service = serviceWith();
 
   beforeEach(async () => {
     now = START;
@@ -51,6 +62,7 @@ describe("Meeting service", () => {
         recordingEndedAt: null,
         transcript: null,
         summary: null,
+        actionItems: [],
       });
       expect(
         created.speakers.map(({ name, position }) => ({ name, position })),
@@ -247,7 +259,7 @@ describe("Meeting service", () => {
       return service.stopRecording(created.id);
     }
 
-    it("transcribes a stopped Recording and marks the Meeting ready", async () => {
+    it("transcribes and summarizes a stopped Recording and marks the Meeting ready", async () => {
       const stopped = await stoppedMeeting();
 
       const processed = await service.processMeeting(stopped.id);
@@ -256,7 +268,150 @@ describe("Meeting service", () => {
       expect(processed.failedStep).toBeNull();
       expect(processed.errorMessage).toBeNull();
       expect(processed.transcript).not.toBeNull();
+      expect(processed.summary!.overview).toContain("Q3 roadmap sync");
+      expect(processed.summary!.keyTakeaways.length).toBeGreaterThanOrEqual(3);
+      expect(processed.summary!.keyTakeaways.length).toBeLessThanOrEqual(7);
       expect(await service.getMeeting(stopped.id)).toEqual(processed);
+    });
+
+    it("persists the Action Items in order, not done, owned by the Meeting's Speakers", async () => {
+      const stopped = await stoppedMeeting();
+
+      const { actionItems, speakers } = await service.processMeeting(
+        stopped.id,
+      );
+
+      expect(actionItems.length).toBeGreaterThan(0);
+      const speakerIds = new Set(speakers.map((speaker) => speaker.id));
+      actionItems.forEach((item, index) => {
+        expect(item).toMatchObject({
+          meetingId: stopped.id,
+          position: index,
+          done: false,
+        });
+        expect(item.text.length).toBeGreaterThan(0);
+        if (item.ownerSpeakerId !== null) {
+          expect(speakerIds.has(item.ownerSpeakerId)).toBe(true);
+        }
+      });
+      expect(actionItems.some((item) => item.ownerSpeakerId !== null)).toBe(
+        true,
+      );
+    });
+
+    it("is summarizing, with the Transcript already saved, while the SummarizationProvider runs", async () => {
+      const seen: { status: string | undefined; hasTranscript: boolean }[] = [];
+      const observing: SummarizationProvider = {
+        summarize: async (input) => {
+          const report = await service.getMeetingStatus(stopped.id);
+          const stored = await service.getMeeting(stopped.id);
+          seen.push({
+            status: report?.status,
+            hasTranscript: stored?.transcript !== null,
+          });
+          return createFakeSummarizationProvider().summarize(input);
+        },
+      };
+      const stopped = await stoppedMeeting();
+
+      await serviceWith({ summarizationProvider: observing }).processMeeting(
+        stopped.id,
+      );
+
+      expect(seen).toEqual([{ status: "summarizing", hasTranscript: true }]);
+    });
+
+    it("gives the SummarizationProvider the Meeting and its Transcript", async () => {
+      let received: Parameters<SummarizationProvider["summarize"]>[0] | null =
+        null;
+      const capturing: SummarizationProvider = {
+        summarize: async (input) => {
+          received = input;
+          return createFakeSummarizationProvider().summarize(input);
+        },
+      };
+      const stopped = await stoppedMeeting();
+
+      const processed = await serviceWith({
+        summarizationProvider: capturing,
+      }).processMeeting(stopped.id);
+
+      expect(received).toEqual({
+        title: "Q3 roadmap sync",
+        agenda: "Confirm priorities, pick a launch date",
+        speakers: processed.speakers.map(({ id, name }) => ({ id, name })),
+        transcript: processed.transcript,
+      });
+    });
+
+    it("marks the Meeting failed at summarizing, keeping the Transcript, when the provider throws", async () => {
+      const broken: SummarizationProvider = {
+        summarize: async () => {
+          throw new Error("Claude is unavailable");
+        },
+      };
+      const stopped = await stoppedMeeting();
+
+      const processed = await serviceWith({
+        summarizationProvider: broken,
+      }).processMeeting(stopped.id);
+
+      expect(processed).toMatchObject({
+        status: "failed",
+        failedStep: "summarizing",
+        errorMessage: "Claude is unavailable",
+        summary: null,
+        actionItems: [],
+      });
+      expect(processed.transcript).not.toBeNull();
+      expect(await service.getMeeting(stopped.id)).toEqual(processed);
+    });
+
+    it("rejects an Action Item whose owner is not a Speaker of that Meeting as a provider error", async () => {
+      const other = await service.createMeeting({
+        title: "Another Meeting",
+        speakers: ["Dev", "Eve"],
+      });
+      const strangerOwned: SummarizationProvider = {
+        summarize: async (input) => {
+          const output =
+            await createFakeSummarizationProvider().summarize(input);
+          output.actionItems[0].ownerSpeakerId = other.speakers[0].id;
+          return output;
+        },
+      };
+      const stopped = await stoppedMeeting();
+
+      const processed = await serviceWith({
+        summarizationProvider: strangerOwned,
+      }).processMeeting(stopped.id);
+
+      expect(processed).toMatchObject({
+        status: "failed",
+        failedStep: "summarizing",
+        summary: null,
+        actionItems: [],
+      });
+      expect(processed.errorMessage).toMatch(/owner is not a Speaker/);
+    });
+
+    it("marks the Meeting failed when the provider returns a malformed Summary", async () => {
+      const malformed: SummarizationProvider = {
+        summarize: async () => ({
+          overview: "Too few takeaways",
+          keyTakeaways: ["Only one"],
+          actionItems: [],
+        }),
+      };
+      const stopped = await stoppedMeeting();
+
+      const processed = await serviceWith({
+        summarizationProvider: malformed,
+      }).processMeeting(stopped.id);
+
+      expect(processed.status).toBe("failed");
+      expect(processed.failedStep).toBe("summarizing");
+      expect(processed.errorMessage).toMatch(/Summary/);
     });
 
     it("sizes the Transcript to the Recording and keeps every Utterance inside it", async () => {
@@ -303,11 +458,7 @@ describe("Meeting service", () => {
           return createFakeTranscriptionProvider().generateTranscript(input);
         },
       };
-      const racing = createMeetingService(db, {
-        transcriptionProvider: counting,
-        maxMeetingsPerDay: 3,
-        now: () => now,
-      });
+      const racing = serviceWith({ transcriptionProvider: counting });
       const stopped = await stoppedMeeting();
 
       const results = await Promise.all([
@@ -345,11 +496,7 @@ describe("Meeting service", () => {
           throw new Error("Claude is unavailable");
         },
       };
-      const failing = createMeetingService(db, {
-        transcriptionProvider: broken,
-        maxMeetingsPerDay: 3,
-        now: () => now,
-      });
+      const failing = serviceWith({ transcriptionProvider: broken });
       const stopped = await stoppedMeeting();
 
       const processed = await failing.processMeeting(stopped.id);
@@ -376,11 +523,7 @@ describe("Meeting service", () => {
           ],
         }),
       };
-      const failing = createMeetingService(db, {
-        transcriptionProvider: malformed,
-        maxMeetingsPerDay: 3,
-        now: () => now,
-      });
+      const failing = serviceWith({ transcriptionProvider: malformed });
       const stopped = await stoppedMeeting();
 
       const processed = await failing.processMeeting(stopped.id);
@@ -389,6 +532,170 @@ describe("Meeting service", () => {
       expect(processed.failedStep).toBe("transcribing");
       expect(processed.errorMessage).toMatch(/Transcript/);
       expect(processed.transcript).toBeNull();
+    });
+  });
+
+  describe("toggleActionItem", () => {
+    async function readyMeeting() {
+      const created = await service.createMeeting({
+        title: "Q3 roadmap sync",
+        speakers: ["Amara", "Ben", "Chloe"],
+        agenda: "Confirm priorities, pick a launch date",
+      });
+      now = new Date(START.getTime() + 10 * 60_000);
+      await service.stopRecording(created.id);
+      return service.processMeeting(created.id);
+    }
+
+    it("marks an Action Item done, then undone, and returns the Meeting each time", async () => {
+      const ready = await readyMeeting();
+      const [first, second] = ready.actionItems;
+
+      const done = await service.toggleActionItem(ready.id, first.id);
+
+      expect(done.actionItems.map((item) => item.done)).toEqual(
+        ready.actionItems.map((item) => item.id === first.id),
+      );
+      expect(done.actionItems[1]).toEqual(second);
+      expect(await service.getMeeting(ready.id)).toEqual(done);
+
+      const undone = await service.toggleActionItem(ready.id, first.id);
+
+      expect(undone.actionItems.every((item) => !item.done)).toBe(true);
+    });
+
+    it("throws ActionItemNotFoundError for an Action Item of a different Meeting", async () => {
+      const ready = await readyMeeting();
+      const other = await service.createMeeting({
+        title: "Other",
+        speakers: ["Dev", "Eve"],
+      });
+
+      await expect(
+        service.toggleActionItem(other.id, ready.actionItems[0].id),
+      ).rejects.toBeInstanceOf(ActionItemNotFoundError);
+      await expect(
+        service.toggleActionItem(
+          ready.id,
+          "00000000-0000-4000-8000-000000000000",
+        ),
+      ).rejects.toBeInstanceOf(ActionItemNotFoundError);
+      expect((await service.getMeeting(ready.id))!.actionItems).toEqual(
+        ready.actionItems,
+      );
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.toggleActionItem(
+          "00000000-0000-4000-8000-000000000000",
+          "00000000-0000-4000-8000-000000000001",
+        ),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+    });
+  });
+
+  describe("regenerateSummary", () => {
+    /** Each call gives a different Summary, so a replacement is visibly new. */
+    function numberedProvider(): SummarizationProvider {
+      let calls = 0;
+      return {
+        summarize: async (input) => {
+          calls += 1;
+          const output =
+            await createFakeSummarizationProvider().summarize(input);
+          return { ...output, overview: `Take ${calls}: ${output.overview}` };
+        },
+      };
+    }
+
+    async function readyMeeting(target = service) {
+      const created = await target.createMeeting({
+        title: "Q3 roadmap sync",
+        speakers: ["Amara", "Ben", "Chloe"],
+        agenda: "Confirm priorities, pick a launch date",
+      });
+      now = new Date(START.getTime() + 10 * 60_000);
+      await target.stopRecording(created.id);
+      return target.processMeeting(created.id);
+    }
+
+    it("sends a ready Meeting back to summarizing and keeps the Transcript", async () => {
+      const ready = await readyMeeting();
+      now = new Date(now.getTime() + 60_000);
+
+      const regenerating = await service.regenerateSummary(ready.id);
+
+      expect(regenerating).toMatchObject({
+        status: "summarizing",
+        transcript: ready.transcript,
+        updatedAt: now,
+      });
+      expect(await service.getMeeting(ready.id)).toEqual(regenerating);
+    });
+
+    it("replaces the Summary and Action Items, losing done state, once processed", async () => {
+      const numbered = serviceWith({
+        summarizationProvider: numberedProvider(),
+      });
+      const ready = await readyMeeting(numbered);
+      const toggled = await numbered.toggleActionItem(
+        ready.id,
+        ready.actionItems[0].id,
+      );
+      expect(toggled.actionItems[0].done).toBe(true);
+
+      await numbered.regenerateSummary(ready.id);
+      const regenerated = await numbered.processMeeting(ready.id);
+
+      expect(regenerated.status).toBe("ready");
+      expect(ready.summary!.overview).toMatch(/^Take 1:/);
+      expect(regenerated.summary!.overview).toMatch(/^Take 2:/);
+      expect(regenerated.actionItems.length).toBeGreaterThan(0);
+      expect(regenerated.actionItems.every((item) => !item.done)).toBe(true);
+      const oldIds = new Set(ready.actionItems.map((item) => item.id));
+      expect(regenerated.actionItems.some((item) => oldIds.has(item.id))).toBe(
+        false,
+      );
+      expect(await numbered.getMeeting(ready.id)).toEqual(regenerated);
+    });
+
+    it("keeps the current Summary and Action Items if regeneration fails", async () => {
+      const ready = await readyMeeting();
+      const broken: SummarizationProvider = {
+        summarize: async () => {
+          throw new Error("Claude is unavailable");
+        },
+      };
+
+      await service.regenerateSummary(ready.id);
+      const failed = await serviceWith({
+        summarizationProvider: broken,
+      }).processMeeting(ready.id);
+
+      expect(failed).toMatchObject({
+        status: "failed",
+        failedStep: "summarizing",
+        summary: ready.summary,
+        actionItems: ready.actionItems,
+      });
+    });
+
+    it("does nothing for a Meeting that is not ready", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      await expect(service.regenerateSummary(created.id)).resolves.toEqual(
+        created,
+      );
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.regenerateSummary("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
     });
   });
 
