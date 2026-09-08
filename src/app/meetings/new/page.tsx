@@ -22,8 +22,9 @@ export default function NewMeetingPage() {
         New meeting
       </h1>
       <p className="text-muted-foreground mt-2 text-sm leading-6">
-        Name the Meeting and list who is in the room. Recording starts as soon
-        as you submit.
+        Name the Meeting and list who is in the room. Then start a live
+        Recording, or create an Instant Meeting that skips straight to
+        Transcribing.
       </p>
       <NewMeetingForm defaults={EXAMPLE} />
     </main>

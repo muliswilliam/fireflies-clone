@@ -11,3 +11,6 @@ export const INITIAL_CREATE_MEETING_STATE: CreateMeetingFormState = {
   issues: [],
   formError: null,
 };
+
+/** The two ways to submit the form: start a live Recording, or create an Instant Meeting. */
+export type CreateIntent = "start" | "instant";

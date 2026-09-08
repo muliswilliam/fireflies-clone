@@ -44,7 +44,11 @@ import {
 } from "./transcript";
 import { formatDuration } from "@/lib/format";
 
-import { validateMeetingInput } from "./validation";
+import {
+  validateInstantMeetingInput,
+  validateMeetingInput,
+  type ValidatedMeetingInput,
+} from "./validation";
 import type { z } from "zod";
 
 export type Speaker = typeof speakers.$inferSelect;
@@ -88,6 +92,11 @@ export type CreateMeetingInput = {
   isSample?: boolean;
 };
 
+export type CreateInstantMeetingInput = CreateMeetingInput & {
+  /** One of `INSTANT_MEETING_DURATION_OPTIONS_MINUTES`; the default is 30. */
+  durationMinutes?: number;
+};
+
 export type MeetingServiceConfig = {
   transcriptionProvider: TranscriptionProvider;
   summarizationProvider: SummarizationProvider;
@@ -121,26 +130,62 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   const now = config.now ?? (() => new Date());
   const providerTimeoutMs = config.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
 
+  /** Starts a live Recording: the Meeting is `recording` until `stopRecording`. */
   async function createMeeting(input: CreateMeetingInput): Promise<Meeting> {
     const normalized = validateMeetingInput(input);
-    const isSample = input.isSample ?? false;
     const startedAt = now();
 
+    return insertMeeting(normalized, {
+      status: "recording",
+      isSample: input.isSample ?? false,
+      isInstant: false,
+      recordingStartedAt: startedAt,
+      recordingEndedAt: null,
+      createdAt: startedAt,
+    });
+  }
+
+  /**
+   * Creates an Instant Meeting: no live Recording. The Recording is dated as if it had just
+   * ended after running for the chosen duration, and the Meeting starts at `transcribing`, so
+   * the caller schedules `processMeeting` straight away (ADR-0002). Same rules and daily cap
+   * as `createMeeting`.
+   */
+  async function createInstantMeeting(
+    input: CreateInstantMeetingInput,
+  ): Promise<Meeting> {
+    const normalized = validateInstantMeetingInput(input);
+    const endedAt = now();
+
+    return insertMeeting(normalized, {
+      status: "transcribing",
+      isSample: input.isSample ?? false,
+      isInstant: true,
+      recordingStartedAt: new Date(
+        endedAt.getTime() - normalized.durationMinutes * 60_000,
+      ),
+      recordingEndedAt: endedAt,
+      createdAt: endedAt,
+    });
+  }
+
+  /** Inserts a Meeting and its Speakers in one transaction, under the daily cap (ADR-0005). */
+  async function insertMeeting(
+    normalized: ValidatedMeetingInput,
+    row: MeetingKindColumns,
+  ): Promise<Meeting> {
     return db.transaction(async (tx) => {
-      if (!isSample) {
-        await assertBelowDailyCap(tx, startedAt);
+      if (!row.isSample) {
+        await assertBelowDailyCap(tx, row.createdAt);
       }
 
       const [meeting] = await tx
         .insert(meetings)
         .values({
           title: normalized.title,
-          status: "recording",
           agenda: normalized.agenda,
-          isSample,
-          recordingStartedAt: startedAt,
-          createdAt: startedAt,
-          updatedAt: startedAt,
+          ...row,
+          updatedAt: row.createdAt,
         })
         .returning();
 
@@ -573,6 +618,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 
   return {
     createMeeting,
+    createInstantMeeting,
     stopRecording,
     processMeeting,
     toggleActionItem,
@@ -587,6 +633,19 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 /** Anything queries can run on: the shared handle or an open transaction. */
 type Executor = Db | Transaction;
+
+/** The columns that differ between a live and an Instant Meeting at creation; title, agenda and Speakers come validated. */
+type MeetingKindColumns = Required<
+  Pick<
+    typeof meetings.$inferInsert,
+    | "status"
+    | "isSample"
+    | "isInstant"
+    | "recordingStartedAt"
+    | "recordingEndedAt"
+    | "createdAt"
+  >
+>;
 
 export type MeetingService = ReturnType<typeof createMeetingService>;
 
