@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const serverEnvSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** Global cap on non-sample Meetings created in any rolling 24 hours (ADR-0005). */
+  MAX_MEETINGS_PER_DAY: z.coerce.number().int().positive().default(50),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

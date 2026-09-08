@@ -6,6 +6,15 @@ A simplified Fireflies.ai clone: record a Meeting, read its Transcript, and get 
 
 Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`docs/adr/`](docs/adr/).
 
+## What it does today
+
+- `/` lists Meetings newest first with title, date, duration (once the Recording has ended), Speaker count and Status, plus a title search.
+- `/meetings/new` creates a Meeting from a prefilled form: title, 2 to 6 Speakers with unique names, optional agenda. Validation errors show inline.
+- `/meetings/[id]` shows the Meeting, its Speakers and a Status stepper (Recording, Transcribing, Summarizing, Ready).
+- A global cap (`MAX_MEETINGS_PER_DAY`, default 50) limits Meetings created in any rolling 24 hours; Sample Meetings are exempt. See ADR-0005.
+
+Recording, Transcript, Summary and Action Items arrive in the following tickets.
+
 ## Stack
 
 Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Drizzle ORM over Postgres, Zod, Vitest, Playwright, pnpm, Node 24.
@@ -42,7 +51,7 @@ Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the
 | ---------------- | --------------------------------------------------------------------- |
 | `pnpm lint`      | ESLint (Next preset) and Prettier check                               |
 | `pnpm typecheck` | `next typegen` then `tsc --noEmit`                                    |
-| `pnpm test`      | Vitest against a real Postgres (`firefly_notes_test`, created for you) |
+| `pnpm test`      | Vitest against a real Postgres (`firefly_notes_test`, created for you); service tests run one file at a time |
 | `pnpm test:e2e`  | Playwright smoke test; starts the app itself                          |
 
 Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`.

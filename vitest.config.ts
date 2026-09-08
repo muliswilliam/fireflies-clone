@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Integration tests share one Postgres database; running files one at a time keeps them isolated.
+    fileParallelism: false,
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts", "tests/**/*.test.ts"],
     globalSetup: ["./tests/global-setup.ts"],
     env: {

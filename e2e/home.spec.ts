@@ -1,14 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-test("home page loads with the Firefly Notes empty state", async ({ page }) => {
+test("home page lists Meetings with a New meeting call to action", async ({
+  page,
+}) => {
   await page.goto("/");
 
   await expect(page).toHaveTitle("Firefly Notes");
   await expect(
-    page.getByRole("heading", { name: "Firefly Notes" }),
+    page.getByRole("heading", { name: "Meetings", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "No meetings yet" }),
+    page.getByRole("link", { name: "New meeting" }).first(),
   ).toBeVisible();
 });
 

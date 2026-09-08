@@ -1,0 +1,33 @@
+import "server-only";
+
+import { getDb } from "@/lib/db";
+import { getEnv } from "@/lib/env";
+
+import { createMeetingService, type MeetingService } from "./service";
+
+export {
+  DailyCapReachedError,
+  MeetingValidationError,
+  type MeetingValidationIssue,
+} from "./errors";
+export type {
+  CreateMeetingInput,
+  ListMeetingsInput,
+  Meeting,
+  MeetingListItem,
+  MeetingService,
+  Speaker,
+} from "./service";
+export { MAX_SPEAKERS, MIN_SPEAKERS } from "./validation";
+
+const globalForService = globalThis as typeof globalThis & {
+  __fireflyMeetingService?: MeetingService;
+};
+
+/** Process-wide Meeting service over the shared database handle and environment config. */
+export function getMeetingService(): MeetingService {
+  globalForService.__fireflyMeetingService ??= createMeetingService(getDb(), {
+    maxMeetingsPerDay: getEnv().MAX_MEETINGS_PER_DAY,
+  });
+  return globalForService.__fireflyMeetingService;
+}

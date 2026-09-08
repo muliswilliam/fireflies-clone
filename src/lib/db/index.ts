@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getEnv } from "@/lib/env";
 
 import { createDb, type Db } from "./client";

@@ -20,6 +20,7 @@ export default defineConfig({
     url: `http://localhost:${port}`,
     reuseExistingServer: !isCI,
     timeout: 120_000,
-    env: { AI_PROVIDER: "fake" },
+    // A high cap so repeated local e2e runs against the same database never hit it.
+    env: { AI_PROVIDER: "fake", MAX_MEETINGS_PER_DAY: "1000" },
   },
 });
