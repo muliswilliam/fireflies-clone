@@ -18,6 +18,7 @@ import type { Db } from "@/lib/db/client";
 import {
   actionItems,
   meetings,
+  meetingStatusEnum,
   speakers,
   type FailedStep,
   type MeetingStatus,
@@ -27,6 +28,7 @@ import {
 import {
   ActionItemNotFoundError,
   DailyCapReachedError,
+  MeetingNotFailedError,
   MeetingNotFoundError,
 } from "./errors";
 import {
@@ -40,6 +42,8 @@ import {
   transcriptSchemaFor,
   type Transcript,
 } from "./transcript";
+import { formatDuration } from "@/lib/format";
+
 import { validateMeetingInput } from "./validation";
 import type { z } from "zod";
 
@@ -88,11 +92,16 @@ export type MeetingServiceConfig = {
   transcriptionProvider: TranscriptionProvider;
   summarizationProvider: SummarizationProvider;
   maxMeetingsPerDay: number;
+  /** How long one provider call may take before it counts as a failure. Defaults to `PROVIDER_TIMEOUT_MS`. */
+  providerTimeoutMs?: number;
   /** Injectable clock so the rolling cap window and Recording times are testable. Defaults to wall time. */
   now?: () => Date;
 };
 
 const CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Generous next to the 10 to 25 s a Claude call takes (ADR-0002), but a hung call must not stall a Meeting forever. */
+export const PROVIDER_TIMEOUT_MS = 90_000;
 
 /** Serialises cap checks so two concurrent creates cannot both pass at the boundary. */
 const CAP_LOCK_KEY = "meetings:daily-cap";
@@ -110,6 +119,7 @@ const UUID_PATTERN =
  */
 export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   const now = config.now ?? (() => new Date());
+  const providerTimeoutMs = config.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS;
 
   async function createMeeting(input: CreateMeetingInput): Promise<Meeting> {
     const normalized = validateMeetingInput(input);
@@ -177,8 +187,8 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 
   /**
    * Runs the remaining processing steps for a Meeting, in order: transcribing, then summarizing.
-   * This is the only writer of processing Status transitions apart from create, stop and
-   * `regenerateSummary`. Idempotent: a Meeting that is not in-flight is returned unchanged.
+   * This is the only writer of processing Status transitions apart from create, stop,
+   * `regenerateSummary` and `retryMeeting`. Idempotent: a Meeting that is not in-flight is returned unchanged.
    * Provider failures never throw; they leave the Meeting `failed` at the step that broke.
    */
   async function processMeeting(id: string): Promise<Meeting> {
@@ -302,12 +312,16 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     meeting: Meeting,
     transcript: Transcript,
   ): Promise<SummarizationOutput> {
-    const generated = await config.summarizationProvider.summarize({
-      title: meeting.title,
-      agenda: meeting.agenda,
-      speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
-      transcript,
-    });
+    const generated = await withTimeout(
+      config.summarizationProvider.summarize({
+        title: meeting.title,
+        agenda: meeting.agenda,
+        speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
+        transcript,
+      }),
+      providerTimeoutMs,
+      "SummarizationProvider",
+    );
     return validateProviderOutput(
       "Summary",
       summarizationOutputSchemaFor({
@@ -322,13 +336,17 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     meeting: Meeting,
     durationMs: number,
   ): Promise<Transcript> {
-    const generated = await config.transcriptionProvider.generateTranscript({
-      title: meeting.title,
-      agenda: meeting.agenda,
-      speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
-      durationMs,
-      targetUtteranceCount: targetUtteranceCount(durationMs),
-    });
+    const generated = await withTimeout(
+      config.transcriptionProvider.generateTranscript({
+        title: meeting.title,
+        agenda: meeting.agenda,
+        speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
+        durationMs,
+        targetUtteranceCount: targetUtteranceCount(durationMs),
+      }),
+      providerTimeoutMs,
+      "TranscriptionProvider",
+    );
     return validateProviderOutput(
       "Transcript",
       transcriptSchemaFor({
@@ -408,6 +426,34 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
         ),
       )
       .returning();
+    return afterGuardedUpdate(db, id, updated);
+  }
+
+  /**
+   * Sends a failed Meeting back to the step that failed and clears the failure, so the next
+   * `processMeeting` resumes there: a Meeting that failed at summarizing keeps its Transcript
+   * and never pays for transcription again (ADR-0002). The caller schedules processing next.
+   * Unlike `regenerateSummary` this is not idempotent: retrying a Meeting that has not failed
+   * is a caller mistake and throws `MeetingNotFailedError`.
+   */
+  async function retryMeeting(id: string): Promise<Meeting> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+
+    // One statement, so two Retries racing each other cannot both pass the guard.
+    const [updated] = await db
+      .update(meetings)
+      .set({
+        status: sql`${meetings.failedStep}::text::${sql.identifier(meetingStatusEnum.enumName)}`,
+        failedStep: null,
+        errorMessage: null,
+        updatedAt: now(),
+      })
+      .where(and(eq(meetings.id, id), eq(meetings.status, "failed")))
+      .returning();
+    if (!updated) {
+      const current = await requireMeeting(db, id);
+      throw new MeetingNotFailedError(id, current.status);
+    }
     return afterGuardedUpdate(db, id, updated);
   }
 
@@ -531,6 +577,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     processMeeting,
     toggleActionItem,
     regenerateSummary,
+    retryMeeting,
     getMeeting,
     getMeetingStatus,
     listMeetings,
@@ -568,6 +615,29 @@ function validateProviderOutput<T>(
     );
   }
   return result.data;
+}
+
+/**
+ * Gives up on a provider call that has not settled within `ms`. The underlying call is not
+ * cancelled (the provider interface has no signal); its late result is simply ignored.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  provider: "TranscriptionProvider" | "SummarizationProvider",
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `The ${provider} did not answer within ${formatDuration(ms)}`,
+          ),
+        ),
+      ms,
+    );
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
 
 /** Makes `%`, `_` and `\` match themselves inside a LIKE pattern. */

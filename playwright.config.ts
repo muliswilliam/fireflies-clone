@@ -22,6 +22,11 @@ export default defineConfig({
     reuseExistingServer: !isCI,
     timeout: 120_000,
     // A high cap so repeated local e2e runs against the same database never hit it.
-    env: { AI_PROVIDER: "fake", MAX_MEETINGS_PER_DAY: "1000" },
+    // Fault injection lets a Meeting title make one provider call fail (src/lib/ai/fault-injection.ts).
+    env: {
+      AI_PROVIDER: "fake",
+      MAX_MEETINGS_PER_DAY: "1000",
+      E2E_FAULT_INJECTION: "1",
+    },
   },
 });

@@ -1,3 +1,5 @@
+import type { MeetingStatus } from "@/lib/db/schema";
+
 export type MeetingValidationIssue = {
   /** Dot path into the input, for example `title` or `speakers.2`. */
   path: string;
@@ -49,5 +51,20 @@ export class ActionItemNotFoundError extends Error {
     this.name = "ActionItemNotFoundError";
     this.meetingId = meetingId;
     this.actionItemId = actionItemId;
+  }
+}
+
+/** Retry was asked of a Meeting that is not `failed`; only a failed Meeting has a step to resume. */
+export class MeetingNotFailedError extends Error {
+  readonly meetingId: string;
+  readonly status: MeetingStatus;
+
+  constructor(meetingId: string, status: MeetingStatus) {
+    super(
+      `Meeting ${meetingId} is ${status}, not failed, so there is nothing to retry`,
+    );
+    this.name = "MeetingNotFailedError";
+    this.meetingId = meetingId;
+    this.status = status;
   }
 }

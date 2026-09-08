@@ -29,26 +29,25 @@ export function ProcessingPanel({
   );
 }
 
-/** What went wrong, for a tab whose content never arrived because processing failed. */
+/**
+ * Placeholder for a tab whose content never arrived because processing failed. The banner
+ * above the tabs carries the error and the Retry button, so this only says what is missing.
+ */
 export function FailedPanel({
+  document,
   failedStep,
-  errorMessage,
 }: {
-  failedStep: FailedStep | null;
-  errorMessage: string | null;
+  document: "Transcript" | "Summary" | "Action Items";
+  failedStep: FailedStep;
 }) {
   return (
-    <div
-      role="alert"
-      className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-3 rounded-lg border px-4 py-3 text-sm"
-    >
-      <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <div>
-        <p className="font-medium">
-          {MEETING_STATUS_LABELS[failedStep ?? "transcribing"]} failed
-        </p>
-        {errorMessage && <p className="mt-1 leading-6">{errorMessage}</p>}
-      </div>
+    <div className="text-muted-foreground flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center text-sm">
+      <AlertCircle aria-hidden="true" className="text-destructive size-5" />
+      <p>
+        <span className="text-foreground font-medium">No {document} yet.</span>{" "}
+        {MEETING_STATUS_LABELS[failedStep]} failed; use Retry above to pick up
+        where processing stopped.
+      </p>
     </div>
   );
 }

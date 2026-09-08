@@ -9,6 +9,7 @@ import { createMeetingService, type MeetingService } from "./service";
 export {
   ActionItemNotFoundError,
   DailyCapReachedError,
+  MeetingNotFailedError,
   MeetingNotFoundError,
   MeetingValidationError,
   type MeetingValidationIssue,

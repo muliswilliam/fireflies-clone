@@ -16,8 +16,9 @@ Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`
 - Once the Transcript exists, processing continues into Summarizing: the configured `SummarizationProvider` returns an Overview, 3 to 7 Key Takeaways and up to 10 Action Items, each owned by one of the Meeting's Speakers or nobody, with an optional free-form due date. The Summary is JSONB on the Meeting; Action Items are rows (ADR-0004). The Summary tab shows the Overview and Key Takeaways; the Action Items tab lets you tick items done. Regenerate (with a warning that done state is lost) sends the Meeting back to Summarizing and replaces the Summary and Action Items atomically.
 - `AI_PROVIDER=fake` gives deterministic, instant Transcripts and Summaries; tests and e2e always use it. The Claude providers arrive in #8, so until then `AI_PROVIDER=claude` leaves a stopped Meeting in `failed` with a message saying so.
 - A global cap (`MAX_MEETINGS_PER_DAY`, default 50) limits Meetings created in any rolling 24 hours; Sample Meetings are exempt. See ADR-0005.
+- If a provider throws, answers with something the Transcript or Summary rules reject, or does not answer within 90 s, the Meeting is `failed` at that step with the reason shown on its page. Retry resumes at the failed step: a Meeting that already has a Transcript only summarizes again. Processing is not a durable queue: if the server restarts mid-pipeline the Meeting stays Transcribing or Summarizing, and Retry is only offered once it is `failed`. See ADR-0002.
 
-Failure retry, Instant Meetings, Markdown export and Sample Meetings arrive in the following tickets.
+Instant Meetings, Markdown export and Sample Meetings arrive in the following tickets.
 
 ## Stack
 
@@ -58,7 +59,7 @@ Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the
 | `pnpm test`      | Vitest against a real Postgres (`firefly_notes_test`, created for you); service tests run one file at a time |
 | `pnpm test:e2e`  | Playwright smoke test; starts the app itself                          |
 
-Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`. If something else already listens on port 3000, run e2e with `E2E_PORT=3001 pnpm test:e2e`; locally it reuses a dev server already running on that port.
+Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`. If something else already listens on port 3000, run e2e with `E2E_PORT=3001 pnpm test:e2e`; locally it reuses a dev server already running on that port, which must then have been started with `E2E_FAULT_INJECTION=1` for the failure tests: that flag lets a Meeting title containing `[fail:transcribing]` or `[fail:summarizing]` make the fake provider fail once, so Retry can be exercised end to end. Never set it outside tests.
 
 GitHub Actions runs all four on every push and pull request, plus a Docker image build.
 

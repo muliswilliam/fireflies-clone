@@ -15,9 +15,11 @@ import { StatusStepper } from "@/components/meetings/status-stepper";
 import { SummaryView } from "@/components/meetings/summary-view";
 import { TranscriptView } from "@/components/meetings/transcript-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { FailedStep } from "@/lib/db/schema";
 import { getMeetingService, type Meeting } from "@/lib/meetings";
 
 import { ActionItemsList } from "./action-items-list";
+import { FailedBanner } from "./failed-banner";
 import { RecordingPanel } from "./recording-panel";
 import { RegenerateSummaryButton } from "./regenerate-summary-button";
 
@@ -66,6 +68,14 @@ export default async function MeetingPage({
           failedStep={meeting.failedStep}
         />
       </section>
+
+      {meeting.status === "failed" && (
+        <FailedBanner
+          meetingId={meeting.id}
+          failedStep={failedStepOf(meeting)}
+          errorMessage={meeting.errorMessage}
+        />
+      )}
 
       {meeting.status === "recording" && (
         <RecordingPanel
@@ -143,10 +153,7 @@ function TranscriptPanel({ meeting }: { meeting: Meeting }) {
   }
   if (meeting.status === "failed") {
     return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
+      <FailedPanel document="Transcript" failedStep={failedStepOf(meeting)} />
     );
   }
   return (
@@ -157,27 +164,29 @@ function TranscriptPanel({ meeting }: { meeting: Meeting }) {
 }
 
 function SummaryPanel({ meeting }: { meeting: Meeting }) {
-  if (meeting.status === "ready" && meeting.summary) {
+  // A failed regenerate keeps the previous Summary; show it rather than an empty tab.
+  if (hasSettledSummary(meeting)) {
     return (
       <SummaryView
         summary={meeting.summary}
-        actions={<RegenerateSummaryButton meetingId={meeting.id} />}
+        actions={
+          meeting.status === "ready" && (
+            <RegenerateSummaryButton meetingId={meeting.id} />
+          )
+        }
       />
     );
   }
   if (meeting.status === "failed") {
     return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
+      <FailedPanel document="Summary" failedStep={failedStepOf(meeting)} />
     );
   }
   return <SummaryProcessing meeting={meeting} />;
 }
 
 function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
-  if (meeting.status === "ready") {
+  if (hasSettledSummary(meeting)) {
     return (
       <ActionItemsList
         meetingId={meeting.id}
@@ -188,13 +197,25 @@ function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
   }
   if (meeting.status === "failed") {
     return (
-      <FailedPanel
-        failedStep={meeting.failedStep}
-        errorMessage={meeting.errorMessage}
-      />
+      <FailedPanel document="Action Items" failedStep={failedStepOf(meeting)} />
     );
   }
   return <SummaryProcessing meeting={meeting} />;
+}
+
+/** A Summary that is not about to be replaced: the Meeting is ready, or failed while keeping it. */
+function hasSettledSummary(
+  meeting: Meeting,
+): meeting is Meeting & { summary: NonNullable<Meeting["summary"]> } {
+  return (
+    meeting.summary !== null &&
+    (meeting.status === "ready" || meeting.status === "failed")
+  );
+}
+
+/** The schema guarantees `failed_step` is set whenever the Status is failed; this narrows the type once. */
+function failedStepOf(meeting: Meeting): FailedStep {
+  return meeting.failedStep ?? "transcribing";
 }
 
 /** Summary and Action Items arrive together, so both tabs wait on the same steps. */
