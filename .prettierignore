@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+drizzle/meta
+playwright-report
+test-results
+.lavish
+pnpm-lock.yaml
+*.md
