@@ -1,0 +1,15 @@
+.git
+.github
+.lavish
+.next
+.env
+.env.*
+!.env.example
+node_modules
+dist
+docs
+test-results
+playwright-report
+*.md
+Dockerfile
+docker-compose.yml
