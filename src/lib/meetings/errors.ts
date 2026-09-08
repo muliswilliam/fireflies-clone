@@ -38,3 +38,16 @@ export class MeetingNotFoundError extends Error {
     this.meetingId = meetingId;
   }
 }
+
+/** The Action Item an operation was asked to act on does not exist on that Meeting. */
+export class ActionItemNotFoundError extends Error {
+  readonly meetingId: string;
+  readonly actionItemId: string;
+
+  constructor(meetingId: string, actionItemId: string) {
+    super(`Action Item ${actionItemId} was not found on Meeting ${meetingId}`);
+    this.name = "ActionItemNotFoundError";
+    this.meetingId = meetingId;
+    this.actionItemId = actionItemId;
+  }
+}

@@ -1,21 +1,25 @@
-import { AlertCircle, Loader2 } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { BackToMeetingsLink } from "@/components/back-to-meetings-link";
 import { MeetingMeta } from "@/components/meetings/meeting-meta";
-import { RecordingPanel } from "./recording-panel";
-import { SpeakerNumber } from "@/components/meetings/speaker-number";
 import {
-  MEETING_STATUS_LABELS,
-  StatusBadge,
-} from "@/components/meetings/status-badge";
+  FailedPanel,
+  ProcessingPanel,
+} from "@/components/meetings/panel-states";
+import { SpeakerNumber } from "@/components/meetings/speaker-number";
+import { StatusBadge } from "@/components/meetings/status-badge";
 import { StatusPoller } from "@/components/meetings/status-poller";
 import { StatusStepper } from "@/components/meetings/status-stepper";
+import { SummaryView } from "@/components/meetings/summary-view";
 import { TranscriptView } from "@/components/meetings/transcript-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMeetingService, type Meeting } from "@/lib/meetings";
+
+import { ActionItemsList } from "./action-items-list";
+import { RecordingPanel } from "./recording-panel";
+import { RegenerateSummaryButton } from "./regenerate-summary-button";
 
 export const dynamic = "force-dynamic";
 
@@ -103,9 +107,24 @@ export default async function MeetingPage({
         <Tabs defaultValue="transcript" className="mt-10">
           <TabsList variant="line" aria-label="Meeting content">
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="action-items">
+              Action Items
+              {meeting.status === "ready" && (
+                <span className="text-muted-foreground tabular-nums">
+                  {meeting.actionItems.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="transcript" className="mt-4">
             <TranscriptPanel meeting={meeting} />
+          </TabsContent>
+          <TabsContent value="summary" className="mt-4">
+            <SummaryPanel meeting={meeting} />
+          </TabsContent>
+          <TabsContent value="action-items" className="mt-4">
+            <ActionItemsPanel meeting={meeting} />
           </TabsContent>
         </Tabs>
       )}
@@ -122,37 +141,75 @@ function TranscriptPanel({ meeting }: { meeting: Meeting }) {
       />
     );
   }
-
   if (meeting.status === "failed") {
     return (
-      <div
-        role="alert"
-        className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-3 rounded-lg border px-4 py-3 text-sm"
-      >
-        <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <div>
-          <p className="font-medium">
-            {MEETING_STATUS_LABELS[meeting.failedStep ?? "transcribing"]} failed
-          </p>
-          {meeting.errorMessage && (
-            <p className="mt-1 leading-6">{meeting.errorMessage}</p>
-          )}
-        </div>
-      </div>
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
     );
   }
-
   return (
-    <div
-      role="status"
-      className="text-muted-foreground flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center text-sm"
-    >
-      <Loader2 aria-hidden="true" className="size-5 animate-spin" />
-      <p>
-        <span className="text-foreground font-medium">Transcribing…</span>{" "}
-        Utterances appear here as soon as the Transcript is ready. This page
-        updates itself.
-      </p>
-    </div>
+    <ProcessingPanel step="transcribing">
+      Utterances appear here as soon as the Transcript is ready.
+    </ProcessingPanel>
+  );
+}
+
+function SummaryPanel({ meeting }: { meeting: Meeting }) {
+  if (meeting.status === "ready" && meeting.summary) {
+    return (
+      <SummaryView
+        summary={meeting.summary}
+        actions={<RegenerateSummaryButton meetingId={meeting.id} />}
+      />
+    );
+  }
+  if (meeting.status === "failed") {
+    return (
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
+    );
+  }
+  return <SummaryProcessing meeting={meeting} />;
+}
+
+function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
+  if (meeting.status === "ready") {
+    return (
+      <ActionItemsList
+        meetingId={meeting.id}
+        actionItems={meeting.actionItems}
+        speakers={meeting.speakers}
+      />
+    );
+  }
+  if (meeting.status === "failed") {
+    return (
+      <FailedPanel
+        failedStep={meeting.failedStep}
+        errorMessage={meeting.errorMessage}
+      />
+    );
+  }
+  return <SummaryProcessing meeting={meeting} />;
+}
+
+/** Summary and Action Items arrive together, so both tabs wait on the same steps. */
+function SummaryProcessing({ meeting }: { meeting: Meeting }) {
+  if (meeting.status === "summarizing") {
+    return (
+      <ProcessingPanel step="summarizing">
+        The Overview, Key Takeaways and Action Items appear here once the
+        Summary is ready.
+      </ProcessingPanel>
+    );
+  }
+  return (
+    <ProcessingPanel step="transcribing">
+      The Summary follows once the Transcript is ready.
+    </ProcessingPanel>
   );
 }

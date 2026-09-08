@@ -1,15 +1,39 @@
-import { and, asc, count, desc, eq, gt, ilike, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  ilike,
+  isNotNull,
+  isNull,
+  not,
+  sql,
+} from "drizzle-orm";
 
+import type { SummarizationProvider } from "@/lib/ai/summarization-provider";
 import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import type { Db } from "@/lib/db/client";
 import {
+  actionItems,
   meetings,
   speakers,
   type FailedStep,
   type MeetingStatus,
+  type ProcessingStep,
 } from "@/lib/db/schema";
 
-import { DailyCapReachedError, MeetingNotFoundError } from "./errors";
+import {
+  ActionItemNotFoundError,
+  DailyCapReachedError,
+  MeetingNotFoundError,
+} from "./errors";
+import {
+  summarizationOutputSchemaFor,
+  summarySchema,
+  type SummarizationOutput,
+} from "./summary";
 import {
   targetUtteranceCount,
   transcriptSchema,
@@ -17,11 +41,16 @@ import {
   type Transcript,
 } from "./transcript";
 import { validateMeetingInput } from "./validation";
+import type { z } from "zod";
 
 export type Speaker = typeof speakers.$inferSelect;
+export type ActionItem = typeof actionItems.$inferSelect;
 
-/** A Meeting row with its Speakers in position order. */
-export type Meeting = typeof meetings.$inferSelect & { speakers: Speaker[] };
+/** A Meeting row with its Speakers and Action Items, each in position order. */
+export type Meeting = typeof meetings.$inferSelect & {
+  speakers: Speaker[];
+  actionItems: ActionItem[];
+};
 
 /** Enough to render a row in the Meetings list without loading Transcripts or Summaries. */
 export type MeetingListItem = {
@@ -57,6 +86,7 @@ export type CreateMeetingInput = {
 
 export type MeetingServiceConfig = {
   transcriptionProvider: TranscriptionProvider;
+  summarizationProvider: SummarizationProvider;
   maxMeetingsPerDay: number;
   /** Injectable clock so the rolling cap window and Recording times are testable. Defaults to wall time. */
   now?: () => Date;
@@ -115,7 +145,11 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
         )
         .returning();
 
-      return { ...meeting, speakers: sortByPosition(insertedSpeakers) };
+      return {
+        ...meeting,
+        speakers: sortByPosition(insertedSpeakers),
+        actionItems: [],
+      };
     });
   }
 
@@ -142,16 +176,31 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   }
 
   /**
-   * Runs the remaining processing steps for a Meeting, in order. Today that is transcription;
-   * #5 adds summarization. This is the only writer of processing Status transitions.
-   * Idempotent: a Meeting that is not in-flight is returned unchanged.
+   * Runs the remaining processing steps for a Meeting, in order: transcribing, then summarizing.
+   * This is the only writer of processing Status transitions apart from create, stop and
+   * `regenerateSummary`. Idempotent: a Meeting that is not in-flight is returned unchanged.
    * Provider failures never throw; they leave the Meeting `failed` at the step that broke.
    */
   async function processMeeting(id: string): Promise<Meeting> {
     if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
 
+    // Each step commits on its own so a client polling the Status sees `summarizing` while
+    // the second provider call runs, rather than jumping from `transcribing` to `ready`.
+    let meeting = await runStep(id, "transcribing", transcribe);
+    if (meeting.status === "summarizing") {
+      meeting = await runStep(id, "summarizing", summarize);
+    }
+    return meeting;
+  }
+
+  /** Runs one pipeline step under the Meeting's processing lock, only if the Meeting is at that step. */
+  async function runStep(
+    id: string,
+    status: ProcessingStep,
+    step: (tx: Transaction, meeting: Meeting) => Promise<Meeting>,
+  ): Promise<Meeting> {
     return db.transaction(async (tx) => {
-      // The lock is held for the whole run, provider call included, and released with the
+      // The lock is held for the whole step, provider call included, and released with the
       // transaction. A concurrent run gives up and reports whatever state it can see.
       const { rows } = await tx.execute<{ locked: boolean }>(
         sql`select pg_try_advisory_xact_lock(hashtext(${processLockKey(id)})) as locked`,
@@ -159,20 +208,18 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       if (!rows[0]?.locked) return requireMeeting(tx, id);
 
       const meeting = await requireMeeting(tx, id);
-      if (meeting.status !== "transcribing" || !meeting.recordingEndedAt) {
-        return meeting;
-      }
-      return transcribe(tx, meeting, meeting.recordingEndedAt);
+      if (meeting.status !== status) return meeting;
+      return step(tx, meeting);
     });
   }
 
   async function transcribe(
-    tx: Executor,
+    tx: Transaction,
     meeting: Meeting,
-    recordingEndedAt: Date,
   ): Promise<Meeting> {
+    if (!meeting.recordingEndedAt) return meeting;
     const durationMs =
-      recordingEndedAt.getTime() - meeting.recordingStartedAt.getTime();
+      meeting.recordingEndedAt.getTime() - meeting.recordingStartedAt.getTime();
 
     let transcript: Transcript;
     try {
@@ -183,7 +230,7 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 
     const [updated] = await tx
       .update(meetings)
-      .set({ status: "ready", transcript, updatedAt: now() })
+      .set({ status: "summarizing", transcript, updatedAt: now() })
       .where(
         and(
           eq(meetings.id, meeting.id),
@@ -193,6 +240,81 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       )
       .returning();
     return afterGuardedUpdate(tx, meeting.id, updated);
+  }
+
+  /**
+   * Replaces the Summary and every Action Item in one transaction, so a reader never sees a
+   * new Summary next to old Action Items (or the reverse). Done state on old items is lost.
+   */
+  async function summarize(
+    tx: Transaction,
+    meeting: Meeting,
+  ): Promise<Meeting> {
+    if (!meeting.transcript) {
+      return markFailed(
+        tx,
+        meeting.id,
+        "summarizing",
+        new Error("Cannot summarize a Meeting that has no Transcript"),
+      );
+    }
+
+    let output: SummarizationOutput;
+    try {
+      output = await generateSummary(meeting, meeting.transcript);
+    } catch (error) {
+      return markFailed(tx, meeting.id, "summarizing", error);
+    }
+
+    const [updated] = await tx
+      .update(meetings)
+      .set({
+        status: "ready",
+        summary: {
+          overview: output.overview,
+          keyTakeaways: output.keyTakeaways,
+        },
+        updatedAt: now(),
+      })
+      .where(
+        and(eq(meetings.id, meeting.id), eq(meetings.status, "summarizing")),
+      )
+      .returning();
+    if (!updated) return requireMeeting(tx, meeting.id);
+
+    await tx.delete(actionItems).where(eq(actionItems.meetingId, meeting.id));
+    if (output.actionItems.length > 0) {
+      await tx.insert(actionItems).values(
+        output.actionItems.map((item, position) => ({
+          meetingId: meeting.id,
+          ownerSpeakerId: item.ownerSpeakerId,
+          text: item.text,
+          dueDate: item.dueDate,
+          position,
+        })),
+      );
+    }
+    return afterGuardedUpdate(tx, meeting.id, updated);
+  }
+
+  /** Asks the provider for a Summary and rejects anything that breaks the Summary rules. */
+  async function generateSummary(
+    meeting: Meeting,
+    transcript: Transcript,
+  ): Promise<SummarizationOutput> {
+    const generated = await config.summarizationProvider.summarize({
+      title: meeting.title,
+      agenda: meeting.agenda,
+      speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
+      transcript,
+    });
+    return validateProviderOutput(
+      "Summary",
+      summarizationOutputSchemaFor({
+        speakerIds: meeting.speakers.map((speaker) => speaker.id),
+      }),
+      generated,
+    );
   }
 
   /** Asks the provider for a Transcript and rejects anything that breaks the Transcript rules. */
@@ -207,17 +329,14 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       durationMs,
       targetUtteranceCount: targetUtteranceCount(durationMs),
     });
-    const result = transcriptSchemaFor({
-      durationMs,
-      speakerIds: meeting.speakers.map((speaker) => speaker.id),
-    }).safeParse(generated);
-    if (!result.success) {
-      const issue = result.error.issues[0];
-      throw new Error(
-        `The provider returned an invalid Transcript: ${issue?.message ?? "unknown issue"}`,
-      );
-    }
-    return result.data;
+    return validateProviderOutput(
+      "Transcript",
+      transcriptSchemaFor({
+        durationMs,
+        speakerIds: meeting.speakers.map((speaker) => speaker.id),
+      }),
+      generated,
+    );
   }
 
   async function markFailed(
@@ -241,7 +360,58 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     return afterGuardedUpdate(tx, id, updated);
   }
 
-  /** Returns the Meeting with its Speakers, or `null` when `id` is unknown or not a uuid. */
+  /** Flips an Action Item between done and not done. */
+  async function toggleActionItem(
+    meetingId: string,
+    actionItemId: string,
+  ): Promise<Meeting> {
+    if (!UUID_PATTERN.test(actionItemId)) {
+      await requireMeeting(db, meetingId);
+      throw new ActionItemNotFoundError(meetingId, actionItemId);
+    }
+
+    // One transaction, so the returned Meeting shows the flip and nothing that landed after it.
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(actionItems)
+        .set({ done: not(actionItems.done) })
+        .where(
+          and(
+            eq(actionItems.id, actionItemId),
+            eq(actionItems.meetingId, meetingId),
+          ),
+        )
+        .returning({ id: actionItems.id });
+      const meeting = await requireMeeting(tx, meetingId);
+      if (!updated) throw new ActionItemNotFoundError(meetingId, actionItemId);
+      return meeting;
+    });
+  }
+
+  /**
+   * Sends a ready Meeting back to `summarizing` so the next `processMeeting` replaces its
+   * Summary and Action Items (ADR-0002: the provider call happens after the response).
+   * The current Summary stays in place until the replacement lands, so a failed attempt
+   * loses nothing. Idempotent: a Meeting that is not ready is returned unchanged.
+   */
+  async function regenerateSummary(id: string): Promise<Meeting> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+
+    const [updated] = await db
+      .update(meetings)
+      .set({ status: "summarizing", updatedAt: now() })
+      .where(
+        and(
+          eq(meetings.id, id),
+          eq(meetings.status, "ready"),
+          isNotNull(meetings.transcript),
+        ),
+      )
+      .returning();
+    return afterGuardedUpdate(db, id, updated);
+  }
+
+  /** Returns the Meeting with its Speakers and Action Items, or `null` when `id` is unknown or not a uuid. */
   async function getMeeting(id: string): Promise<Meeting | null> {
     return findMeeting(db, id);
   }
@@ -295,9 +465,12 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
 
     const meeting = await tx.query.meetings.findFirst({
       where: eq(meetings.id, id),
-      with: { speakers: { orderBy: asc(speakers.position) } },
+      with: {
+        speakers: { orderBy: asc(speakers.position) },
+        actionItems: { orderBy: asc(actionItems.position) },
+      },
     });
-    return meeting ? validateStoredTranscript(meeting) : null;
+    return meeting ? validateStoredDocuments(meeting) : null;
   }
 
   async function requireMeeting(tx: Executor, id: string): Promise<Meeting> {
@@ -316,11 +489,21 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     updated: typeof meetings.$inferSelect | undefined,
   ): Promise<Meeting> {
     if (!updated) return requireMeeting(tx, id);
-    const list = await tx.query.speakers.findMany({
-      where: eq(speakers.meetingId, id),
-      orderBy: asc(speakers.position),
+    const [speakerList, actionItemList] = await Promise.all([
+      tx.query.speakers.findMany({
+        where: eq(speakers.meetingId, id),
+        orderBy: asc(speakers.position),
+      }),
+      tx.query.actionItems.findMany({
+        where: eq(actionItems.meetingId, id),
+        orderBy: asc(actionItems.position),
+      }),
+    ]);
+    return validateStoredDocuments({
+      ...updated,
+      speakers: speakerList,
+      actionItems: actionItemList,
     });
-    return validateStoredTranscript({ ...updated, speakers: list });
   }
 
   /** ADR-0005: non-sample Meetings created in the trailing 24 h must stay below the cap. */
@@ -346,6 +529,8 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     createMeeting,
     stopRecording,
     processMeeting,
+    toggleActionItem,
+    regenerateSummary,
     getMeeting,
     getMeetingStatus,
     listMeetings,
@@ -359,11 +544,30 @@ type Executor = Db | Transaction;
 export type MeetingService = ReturnType<typeof createMeetingService>;
 
 /** ADR-0004: JSONB is validated on read as well as write, so a corrupt row fails loudly here. */
-function validateStoredTranscript<M extends Meeting>(meeting: M): M {
+function validateStoredDocuments<M extends Meeting>(meeting: M): M {
   if (meeting.transcript !== null) {
     transcriptSchema.parse(meeting.transcript);
   }
+  if (meeting.summary !== null) {
+    summarySchema.parse(meeting.summary);
+  }
   return meeting;
+}
+
+/** Runs a provider's answer through its schema; anything the schema rejects is a provider error. */
+function validateProviderOutput<T>(
+  document: "Transcript" | "Summary",
+  schema: { safeParse: (value: unknown) => z.ZodSafeParseResult<T> },
+  generated: unknown,
+): T {
+  const result = schema.safeParse(generated);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new Error(
+      `The provider returned an invalid ${document}: ${issue?.message ?? "unknown issue"}`,
+    );
+  }
+  return result.data;
 }
 
 /** Makes `%`, `_` and `\` match themselves inside a LIKE pattern. */
