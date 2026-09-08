@@ -1,9 +1,21 @@
-import { and, asc, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, ilike, isNull, sql } from "drizzle-orm";
 
+import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import type { Db } from "@/lib/db/client";
-import { meetings, speakers, type MeetingStatus } from "@/lib/db/schema";
+import {
+  meetings,
+  speakers,
+  type FailedStep,
+  type MeetingStatus,
+} from "@/lib/db/schema";
 
-import { DailyCapReachedError } from "./errors";
+import { DailyCapReachedError, MeetingNotFoundError } from "./errors";
+import {
+  targetUtteranceCount,
+  transcriptSchema,
+  transcriptSchemaFor,
+  type Transcript,
+} from "./transcript";
 import { validateMeetingInput } from "./validation";
 
 export type Speaker = typeof speakers.$inferSelect;
@@ -23,6 +35,12 @@ export type MeetingListItem = {
   speakerCount: number;
 };
 
+/** What a client polling for progress needs and nothing more. */
+export type MeetingStatusReport = {
+  status: MeetingStatus;
+  failedStep: FailedStep | null;
+};
+
 export type ListMeetingsInput = {
   /** Case-insensitive substring match on the title. Blank means no filter. */
   search?: string | null;
@@ -38,8 +56,9 @@ export type CreateMeetingInput = {
 };
 
 export type MeetingServiceConfig = {
+  transcriptionProvider: TranscriptionProvider;
   maxMeetingsPerDay: number;
-  /** Injectable clock so the rolling cap window is testable. Defaults to wall time. */
+  /** Injectable clock so the rolling cap window and Recording times are testable. Defaults to wall time. */
   now?: () => Date;
 };
 
@@ -48,12 +67,16 @@ const CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Serialises cap checks so two concurrent creates cannot both pass at the boundary. */
 const CAP_LOCK_KEY = "meetings:daily-cap";
 
+/** One processing run per Meeting at a time, so a duplicate Stop or an eager Retry never pays the provider twice. */
+const processLockKey = (id: string) => `meetings:process:${id}`;
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * All Meeting behaviour lives here: creation rules, the daily cap, listing and reading.
- * Server actions and route handlers stay thin and call these operations.
+ * All Meeting behaviour lives here: creation rules, the daily cap, the Recording lifecycle,
+ * the processing pipeline, listing and reading. Server actions and route handlers stay thin
+ * and call these operations.
  */
 export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   const now = config.now ?? (() => new Date());
@@ -96,15 +119,144 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     });
   }
 
+  /**
+   * Ends the Recording: sets `recording_ended_at` and moves the Meeting to `transcribing`.
+   * Idempotent: a Meeting whose Recording has already ended is returned unchanged.
+   * The caller is expected to schedule `processMeeting` next (ADR-0002).
+   */
+  async function stopRecording(id: string): Promise<Meeting> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+    const endedAt = now();
+
+    const [updated] = await db
+      .update(meetings)
+      .set({
+        status: "transcribing",
+        recordingEndedAt: endedAt,
+        updatedAt: endedAt,
+      })
+      .where(and(eq(meetings.id, id), eq(meetings.status, "recording")))
+      .returning();
+
+    return afterGuardedUpdate(db, id, updated);
+  }
+
+  /**
+   * Runs the remaining processing steps for a Meeting, in order. Today that is transcription;
+   * #5 adds summarization. This is the only writer of processing Status transitions.
+   * Idempotent: a Meeting that is not in-flight is returned unchanged.
+   * Provider failures never throw; they leave the Meeting `failed` at the step that broke.
+   */
+  async function processMeeting(id: string): Promise<Meeting> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+
+    return db.transaction(async (tx) => {
+      // The lock is held for the whole run, provider call included, and released with the
+      // transaction. A concurrent run gives up and reports whatever state it can see.
+      const { rows } = await tx.execute<{ locked: boolean }>(
+        sql`select pg_try_advisory_xact_lock(hashtext(${processLockKey(id)})) as locked`,
+      );
+      if (!rows[0]?.locked) return requireMeeting(tx, id);
+
+      const meeting = await requireMeeting(tx, id);
+      if (meeting.status !== "transcribing" || !meeting.recordingEndedAt) {
+        return meeting;
+      }
+      return transcribe(tx, meeting, meeting.recordingEndedAt);
+    });
+  }
+
+  async function transcribe(
+    tx: Executor,
+    meeting: Meeting,
+    recordingEndedAt: Date,
+  ): Promise<Meeting> {
+    const durationMs =
+      recordingEndedAt.getTime() - meeting.recordingStartedAt.getTime();
+
+    let transcript: Transcript;
+    try {
+      transcript = await generateTranscript(meeting, durationMs);
+    } catch (error) {
+      return markFailed(tx, meeting.id, "transcribing", error);
+    }
+
+    const [updated] = await tx
+      .update(meetings)
+      .set({ status: "ready", transcript, updatedAt: now() })
+      .where(
+        and(
+          eq(meetings.id, meeting.id),
+          eq(meetings.status, "transcribing"),
+          isNull(meetings.transcript),
+        ),
+      )
+      .returning();
+    return afterGuardedUpdate(tx, meeting.id, updated);
+  }
+
+  /** Asks the provider for a Transcript and rejects anything that breaks the Transcript rules. */
+  async function generateTranscript(
+    meeting: Meeting,
+    durationMs: number,
+  ): Promise<Transcript> {
+    const generated = await config.transcriptionProvider.generateTranscript({
+      title: meeting.title,
+      agenda: meeting.agenda,
+      speakers: meeting.speakers.map(({ id, name }) => ({ id, name })),
+      durationMs,
+      targetUtteranceCount: targetUtteranceCount(durationMs),
+    });
+    const result = transcriptSchemaFor({
+      durationMs,
+      speakerIds: meeting.speakers.map((speaker) => speaker.id),
+    }).safeParse(generated);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      throw new Error(
+        `The provider returned an invalid Transcript: ${issue?.message ?? "unknown issue"}`,
+      );
+    }
+    return result.data;
+  }
+
+  async function markFailed(
+    tx: Executor,
+    id: string,
+    step: FailedStep,
+    error: unknown,
+  ): Promise<Meeting> {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Meeting ${id} failed at ${step}:`, error);
+    const [updated] = await tx
+      .update(meetings)
+      .set({
+        status: "failed",
+        failedStep: step,
+        errorMessage: message,
+        updatedAt: now(),
+      })
+      .where(and(eq(meetings.id, id), eq(meetings.status, step)))
+      .returning();
+    return afterGuardedUpdate(tx, id, updated);
+  }
+
   /** Returns the Meeting with its Speakers, or `null` when `id` is unknown or not a uuid. */
   async function getMeeting(id: string): Promise<Meeting | null> {
+    return findMeeting(db, id);
+  }
+
+  /** Cheap enough to poll every couple of seconds. `null` when `id` is unknown. */
+  async function getMeetingStatus(
+    id: string,
+  ): Promise<MeetingStatusReport | null> {
     if (!UUID_PATTERN.test(id)) return null;
 
-    const meeting = await db.query.meetings.findFirst({
-      where: eq(meetings.id, id),
-      with: { speakers: { orderBy: asc(speakers.position) } },
-    });
-    return meeting ?? null;
+    const [row] = await db
+      .select({ status: meetings.status, failedStep: meetings.failedStep })
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    return row ?? null;
   }
 
   /** Newest first. */
@@ -135,6 +287,42 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
       .orderBy(desc(meetings.createdAt), desc(meetings.id));
   }
 
+  async function findMeeting(
+    tx: Executor,
+    id: string,
+  ): Promise<Meeting | null> {
+    if (!UUID_PATTERN.test(id)) return null;
+
+    const meeting = await tx.query.meetings.findFirst({
+      where: eq(meetings.id, id),
+      with: { speakers: { orderBy: asc(speakers.position) } },
+    });
+    return meeting ? validateStoredTranscript(meeting) : null;
+  }
+
+  async function requireMeeting(tx: Executor, id: string): Promise<Meeting> {
+    const meeting = await findMeeting(tx, id);
+    if (!meeting) throw new MeetingNotFoundError(id);
+    return meeting;
+  }
+
+  /**
+   * Resolves a conditional update: the updated row when the guard matched, otherwise the
+   * Meeting as it currently is (or not found). Keeps every state transition race-safe.
+   */
+  async function afterGuardedUpdate(
+    tx: Executor,
+    id: string,
+    updated: typeof meetings.$inferSelect | undefined,
+  ): Promise<Meeting> {
+    if (!updated) return requireMeeting(tx, id);
+    const list = await tx.query.speakers.findMany({
+      where: eq(speakers.meetingId, id),
+      orderBy: asc(speakers.position),
+    });
+    return validateStoredTranscript({ ...updated, speakers: list });
+  }
+
   /** ADR-0005: non-sample Meetings created in the trailing 24 h must stay below the cap. */
   async function assertBelowDailyCap(tx: Transaction, at: Date) {
     await tx.execute(
@@ -154,12 +342,29 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     }
   }
 
-  return { createMeeting, getMeeting, listMeetings };
+  return {
+    createMeeting,
+    stopRecording,
+    processMeeting,
+    getMeeting,
+    getMeetingStatus,
+    listMeetings,
+  };
 }
 
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/** Anything queries can run on: the shared handle or an open transaction. */
+type Executor = Db | Transaction;
 
 export type MeetingService = ReturnType<typeof createMeetingService>;
+
+/** ADR-0004: JSONB is validated on read as well as write, so a corrupt row fails loudly here. */
+function validateStoredTranscript<M extends Meeting>(meeting: M): M {
+  if (meeting.transcript !== null) {
+    transcriptSchema.parse(meeting.transcript);
+  }
+  return meeting;
+}
 
 /** Makes `%`, `_` and `\` match themselves inside a LIKE pattern. */
 function escapeLikePattern(value: string): string {

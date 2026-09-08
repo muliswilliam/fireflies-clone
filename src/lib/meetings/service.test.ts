@@ -1,9 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createFakeTranscriptionProvider } from "@/lib/ai/fake-transcription-provider";
+import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import { createDb } from "@/lib/db/client";
 import { meetings } from "@/lib/db/schema";
 import {
   DailyCapReachedError,
+  MeetingNotFoundError,
   MeetingValidationError,
 } from "@/lib/meetings/errors";
 import { createMeetingService } from "@/lib/meetings/service";
@@ -16,6 +19,7 @@ describe("Meeting service", () => {
   const db = createDb(testDatabaseUrl());
   let now = START;
   const service = createMeetingService(db, {
+    transcriptionProvider: createFakeTranscriptionProvider(),
     maxMeetingsPerDay: 3,
     now: () => now,
   });
@@ -184,6 +188,235 @@ describe("Meeting service", () => {
       await expect(service.createMeeting(input)).resolves.toMatchObject({
         recordingStartedAt: now,
       });
+    });
+  });
+
+  describe("stopRecording", () => {
+    it("ends the Recording and moves the Meeting to transcribing", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+      now = new Date(START.getTime() + 90_000);
+
+      const stopped = await service.stopRecording(created.id);
+
+      expect(stopped).toMatchObject({
+        id: created.id,
+        status: "transcribing",
+        recordingStartedAt: START,
+        recordingEndedAt: now,
+        transcript: null,
+      });
+      expect(stopped.speakers).toEqual(created.speakers);
+      expect(await service.getMeeting(created.id)).toEqual(stopped);
+    });
+
+    it("is a no-op when the Recording has already been stopped", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+      now = new Date(START.getTime() + 90_000);
+      const first = await service.stopRecording(created.id);
+
+      now = new Date(START.getTime() + 120_000);
+      const second = await service.stopRecording(created.id);
+
+      expect(second).toEqual(first);
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.stopRecording("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+      await expect(service.stopRecording("nope")).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
+    });
+  });
+
+  describe("processMeeting", () => {
+    async function stoppedMeeting(durationMs = 10 * 60_000) {
+      const created = await service.createMeeting({
+        title: "Q3 roadmap sync",
+        speakers: ["Amara", "Ben", "Chloe"],
+        agenda: "Confirm priorities, pick a launch date",
+      });
+      now = new Date(START.getTime() + durationMs);
+      return service.stopRecording(created.id);
+    }
+
+    it("transcribes a stopped Recording and marks the Meeting ready", async () => {
+      const stopped = await stoppedMeeting();
+
+      const processed = await service.processMeeting(stopped.id);
+
+      expect(processed.status).toBe("ready");
+      expect(processed.failedStep).toBeNull();
+      expect(processed.errorMessage).toBeNull();
+      expect(processed.transcript).not.toBeNull();
+      expect(await service.getMeeting(stopped.id)).toEqual(processed);
+    });
+
+    it("sizes the Transcript to the Recording and keeps every Utterance inside it", async () => {
+      const stopped = await stoppedMeeting(10 * 60_000);
+
+      const { transcript, speakers } = await service.processMeeting(stopped.id);
+
+      expect(transcript!.utterances).toHaveLength(50);
+      const speakerIds = new Set(speakers.map((speaker) => speaker.id));
+      let previousStart = 0;
+      for (const utterance of transcript!.utterances) {
+        expect(speakerIds.has(utterance.speakerId)).toBe(true);
+        expect(utterance.startMs).toBeGreaterThanOrEqual(previousStart);
+        expect(utterance.endMs).toBeGreaterThanOrEqual(utterance.startMs);
+        expect(utterance.endMs).toBeLessThanOrEqual(10 * 60_000);
+        previousStart = utterance.startMs;
+      }
+    });
+
+    it("clamps a very short Recording to 8 Utterances", async () => {
+      const stopped = await stoppedMeeting(3_000);
+
+      const { transcript } = await service.processMeeting(stopped.id);
+
+      expect(transcript!.utterances).toHaveLength(8);
+    });
+
+    it("does nothing the second time it is called", async () => {
+      const stopped = await stoppedMeeting();
+      const first = await service.processMeeting(stopped.id);
+
+      now = new Date(now.getTime() + 60_000);
+      const second = await service.processMeeting(stopped.id);
+
+      expect(second).toEqual(first);
+    });
+
+    it("runs the provider once when two runs race for the same Meeting", async () => {
+      let calls = 0;
+      const counting: TranscriptionProvider = {
+        generateTranscript: async (input) => {
+          calls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return createFakeTranscriptionProvider().generateTranscript(input);
+        },
+      };
+      const racing = createMeetingService(db, {
+        transcriptionProvider: counting,
+        maxMeetingsPerDay: 3,
+        now: () => now,
+      });
+      const stopped = await stoppedMeeting();
+
+      const results = await Promise.all([
+        racing.processMeeting(stopped.id),
+        racing.processMeeting(stopped.id),
+      ]);
+
+      expect(calls).toBe(1);
+      expect(results.some((meeting) => meeting.status === "ready")).toBe(true);
+      await expect(service.getMeeting(stopped.id)).resolves.toMatchObject({
+        status: "ready",
+      });
+    });
+
+    it("does nothing while the Recording is still running", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      const result = await service.processMeeting(created.id);
+
+      expect(result).toEqual(created);
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.processMeeting("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+    });
+
+    it("marks the Meeting failed at transcribing when the provider throws", async () => {
+      const broken: TranscriptionProvider = {
+        generateTranscript: async () => {
+          throw new Error("Claude is unavailable");
+        },
+      };
+      const failing = createMeetingService(db, {
+        transcriptionProvider: broken,
+        maxMeetingsPerDay: 3,
+        now: () => now,
+      });
+      const stopped = await stoppedMeeting();
+
+      const processed = await failing.processMeeting(stopped.id);
+
+      expect(processed).toMatchObject({
+        status: "failed",
+        failedStep: "transcribing",
+        errorMessage: "Claude is unavailable",
+        transcript: null,
+      });
+      expect(await service.getMeeting(stopped.id)).toEqual(processed);
+    });
+
+    it("marks the Meeting failed when the provider returns a malformed Transcript", async () => {
+      const malformed: TranscriptionProvider = {
+        generateTranscript: async ({ speakers, durationMs }) => ({
+          utterances: [
+            {
+              speakerId: speakers[0].id,
+              startMs: 0,
+              endMs: durationMs + 1_000,
+              text: "Runs past the end",
+            },
+          ],
+        }),
+      };
+      const failing = createMeetingService(db, {
+        transcriptionProvider: malformed,
+        maxMeetingsPerDay: 3,
+        now: () => now,
+      });
+      const stopped = await stoppedMeeting();
+
+      const processed = await failing.processMeeting(stopped.id);
+
+      expect(processed.status).toBe("failed");
+      expect(processed.failedStep).toBe("transcribing");
+      expect(processed.errorMessage).toMatch(/Transcript/);
+      expect(processed.transcript).toBeNull();
+    });
+  });
+
+  describe("getMeetingStatus", () => {
+    it("reports the Status without loading the rest of the Meeting", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      await expect(service.getMeetingStatus(created.id)).resolves.toEqual({
+        status: "recording",
+        failedStep: null,
+      });
+
+      await service.stopRecording(created.id);
+      await service.processMeeting(created.id);
+
+      await expect(service.getMeetingStatus(created.id)).resolves.toEqual({
+        status: "ready",
+        failedStep: null,
+      });
+    });
+
+    it("returns null for an unknown Meeting", async () => {
+      await expect(
+        service.getMeetingStatus("00000000-0000-4000-8000-000000000000"),
+      ).resolves.toBeNull();
     });
   });
 

@@ -10,10 +10,13 @@ Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`
 
 - `/` lists Meetings newest first with title, date, duration (once the Recording has ended), Speaker count and Status, plus a title search.
 - `/meetings/new` creates a Meeting from a prefilled form: title, 2 to 6 Speakers with unique names, optional agenda. Validation errors show inline.
-- `/meetings/[id]` shows the Meeting, its Speakers and a Status stepper (Recording, Transcribing, Summarizing, Ready).
+- `/meetings/[id]` shows the Meeting, its Speakers and a Status stepper (Recording, Transcribing, Summarizing, Ready). While the Recording runs it shows a live timer, a pulsing indicator and a Stop button.
+- Stopping the Recording ends it and schedules processing after the response (ADR-0002). The page polls `GET /api/meetings/[id]/status` every 2 seconds and re-renders as the Status changes.
+- Processing asks the configured `TranscriptionProvider` (ADR-0001) for a Transcript sized to the Recording: one Utterance per 12 seconds, clamped to 8-80. The Transcript tab shows each Utterance with its Speaker (one colour per Speaker), an mm:ss timestamp that highlights the Utterance when clicked, and the text.
+- `AI_PROVIDER=fake` gives a deterministic, instant Transcript; tests and e2e always use it. The Claude provider arrives in #8, so until then `AI_PROVIDER=claude` leaves a stopped Meeting in `failed` with a message saying so.
 - A global cap (`MAX_MEETINGS_PER_DAY`, default 50) limits Meetings created in any rolling 24 hours; Sample Meetings are exempt. See ADR-0005.
 
-Recording, Transcript, Summary and Action Items arrive in the following tickets.
+Summary, Action Items, failure retry and Instant Meetings arrive in the following tickets.
 
 ## Stack
 
@@ -54,7 +57,7 @@ Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the
 | `pnpm test`      | Vitest against a real Postgres (`firefly_notes_test`, created for you); service tests run one file at a time |
 | `pnpm test:e2e`  | Playwright smoke test; starts the app itself                          |
 
-Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`.
+Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`. If something else already listens on port 3000, run e2e with `E2E_PORT=3001 pnpm test:e2e`; locally it reuses a dev server already running on that port.
 
 GitHub Actions runs all four on every push and pull request, plus a Docker image build.
 

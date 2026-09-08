@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
 
-/** The small numbered disc that identifies a Speaker by position. */
+import { speakerColor } from "./speaker-color";
+
+/** The small numbered disc that identifies a Speaker by position, in the Speaker's colour. */
 export function SpeakerNumber({
   position,
   className,
@@ -8,11 +10,14 @@ export function SpeakerNumber({
   position: number;
   className?: string;
 }) {
+  const color = speakerColor(position);
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-medium",
+        "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        color.chip,
+        color.text,
         className,
       )}
     >

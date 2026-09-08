@@ -37,3 +37,13 @@ export function recordingDurationMs(recording: {
 export function pluralize(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
+
+/** A moment within a Recording as "mm:ss", or "h:mm:ss" once it passes an hour. */
+export function formatTimestamp(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mmss = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return hours > 0 ? `${hours}:${mmss}` : mmss;
+}

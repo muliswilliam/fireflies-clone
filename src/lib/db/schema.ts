@@ -18,6 +18,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { Transcript } from "@/lib/meetings/transcript";
+
 export const MEETING_STATUSES = [
   "recording",
   "transcribing",
@@ -51,8 +53,8 @@ export const meetings = pgTable(
       withTimezone: true,
     }).notNull(),
     recordingEndedAt: timestamp("recording_ended_at", { withTimezone: true }),
-    // Validated by Zod at the service boundary; shapes are owned by #4 and #5.
-    transcript: jsonb("transcript"),
+    // Validated by Zod at the service boundary (ADR-0004). Summary shape arrives with #5.
+    transcript: jsonb("transcript").$type<Transcript>(),
     summary: jsonb("summary"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

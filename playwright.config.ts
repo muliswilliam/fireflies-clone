@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const isCI = !!process.env.CI;
-const port = 3000;
+// Override with E2E_PORT when something else already listens on 3000.
+const port = Number(process.env.E2E_PORT ?? 3000);
 
 export default defineConfig({
   testDir: "./e2e",

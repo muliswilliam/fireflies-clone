@@ -27,3 +27,14 @@ export class DailyCapReachedError extends Error {
     this.maxMeetingsPerDay = maxMeetingsPerDay;
   }
 }
+
+/** The Meeting an operation was asked to act on does not exist. */
+export class MeetingNotFoundError extends Error {
+  readonly meetingId: string;
+
+  constructor(meetingId: string) {
+    super(`Meeting ${meetingId} was not found`);
+    this.name = "MeetingNotFoundError";
+    this.meetingId = meetingId;
+  }
+}
