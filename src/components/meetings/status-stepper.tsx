@@ -67,7 +67,11 @@ export function StatusStepper({
   const progress = stepProgress(status, failedStep);
 
   return (
-    <ol aria-label="Meeting Status" className="flex items-start gap-2 sm:gap-4">
+    <ol
+      aria-label="Meeting Status"
+      data-status={status}
+      className="flex items-start gap-2 sm:gap-4"
+    >
       {STEPS.map((step, index) => {
         const state = progress[step];
         const styles = STEP_STYLES[state];
