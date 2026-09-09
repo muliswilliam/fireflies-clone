@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 
-import { createDb, type Db } from "@/lib/db/client";
+import { createDb, type Db, type Transaction } from "@/lib/db/client";
 import { actionItems, meetings, speakers } from "@/lib/db/schema";
 
 import {
@@ -9,6 +9,9 @@ import {
 } from "./fixture";
 
 export type SeededSampleMeeting = { id: string; title: string };
+
+/** Serialises seeders, so two containers starting together take turns rather than colliding. */
+const SEED_LOCK_KEY = "meetings:seed-samples";
 
 /**
  * Puts every checked-in Sample Meeting in the database, keyed by its fixture id, so the
@@ -22,7 +25,12 @@ export async function seedSampleMeetings(
 ): Promise<SeededSampleMeeting[]> {
   const fixtures = loadSampleMeetingFixtures();
   for (const fixture of fixtures) {
-    await db.transaction((tx) => upsertSampleMeeting(tx, fixture));
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${SEED_LOCK_KEY}))`,
+      );
+      await resetSampleMeeting(tx, fixture);
+    });
   }
   return fixtures.map(({ id, title }) => ({ id, title }));
 }
@@ -39,15 +47,12 @@ export async function seedDatabase(
   }
 }
 
-type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 /**
- * One Sample Meeting, made to match its fixture exactly. Children are replaced rather than
- * diffed: Action Items go first (they reference Speakers), then Speakers, then both come back
- * with their fixture ids. Every insert upserts on id so two seeders racing on start converge
- * instead of failing on a primary key.
+ * One Sample Meeting, made to match its fixture exactly. The Meeting row is upserted on its
+ * id; its Speakers and Action Items are replaced rather than diffed, and come back with their
+ * fixture ids, so the rows are the same after every run.
  */
-async function upsertSampleMeeting(
+async function resetSampleMeeting(
   tx: Transaction,
   fixture: SampleMeetingFixture,
 ) {
@@ -74,52 +79,30 @@ async function upsertSampleMeeting(
     .values({ id: fixture.id, ...row })
     .onConflictDoUpdate({ target: meetings.id, set: row });
 
+  // Action Items reference Speakers, so they go first and come back last.
   await tx.delete(actionItems).where(eq(actionItems.meetingId, fixture.id));
   await tx.delete(speakers).where(eq(speakers.meetingId, fixture.id));
 
-  await tx
-    .insert(speakers)
-    .values(
-      fixture.speakers.map((speaker, position) => ({
-        id: speaker.id,
-        meetingId: fixture.id,
-        name: speaker.name,
-        position,
-      })),
-    )
-    .onConflictDoUpdate({
-      target: speakers.id,
-      set: {
-        meetingId: sql`excluded.meeting_id`,
-        name: sql`excluded.name`,
-        position: sql`excluded.position`,
-      },
-    });
+  await tx.insert(speakers).values(
+    fixture.speakers.map((speaker, position) => ({
+      id: speaker.id,
+      meetingId: fixture.id,
+      name: speaker.name,
+      position,
+    })),
+  );
 
   if (fixture.actionItems.length > 0) {
-    await tx
-      .insert(actionItems)
-      .values(
-        fixture.actionItems.map((item, position) => ({
-          id: item.id,
-          meetingId: fixture.id,
-          ownerSpeakerId: item.ownerSpeakerId,
-          text: item.text,
-          dueDate: item.dueDate,
-          done: false,
-          position,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: actionItems.id,
-        set: {
-          meetingId: sql`excluded.meeting_id`,
-          ownerSpeakerId: sql`excluded.owner_speaker_id`,
-          text: sql`excluded.text`,
-          dueDate: sql`excluded.due_date`,
-          done: false,
-          position: sql`excluded.position`,
-        },
-      });
+    await tx.insert(actionItems).values(
+      fixture.actionItems.map((item, position) => ({
+        id: item.id,
+        meetingId: fixture.id,
+        ownerSpeakerId: item.ownerSpeakerId,
+        text: item.text,
+        dueDate: item.dueDate,
+        done: false,
+        position,
+      })),
+    );
   }
 }

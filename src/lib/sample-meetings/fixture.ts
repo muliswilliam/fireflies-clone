@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MeetingValidationError } from "@/lib/meetings/errors";
 import {
   actionItemDraftSchema,
   MAX_ACTION_ITEMS,
@@ -10,11 +11,11 @@ import {
   transcriptSchema,
   transcriptSchemaFor,
 } from "@/lib/meetings/transcript";
-import { MAX_SPEAKERS, MIN_SPEAKERS } from "@/lib/meetings/validation";
+import { validateMeetingInput } from "@/lib/meetings/validation";
 
-import mobileOnboardingFunnelReview from "./fixtures/mobile-onboarding-funnel-review.json";
-import postmortemCheckoutOutage from "./fixtures/postmortem-checkout-outage.json";
-import q4LaunchReadinessReview from "./fixtures/q4-launch-readiness-review.json";
+import mobileOnboardingFunnelReview from "./fixtures/mobile-onboarding-funnel-review.json" with { type: "json" };
+import postmortemCheckoutOutage from "./fixtures/postmortem-checkout-outage.json" with { type: "json" };
+import q4LaunchReadinessReview from "./fixtures/q4-launch-readiness-review.json" with { type: "json" };
 
 /**
  * A Sample Meeting as checked in: a ready Meeting with every id fixed, so the seeder can
@@ -28,10 +29,7 @@ export const sampleMeetingFixtureSchema = z
     agenda: z.string().trim().min(1).nullable(),
     recordingStartedAt: z.iso.datetime(),
     recordingEndedAt: z.iso.datetime(),
-    speakers: z
-      .array(z.object({ id: z.uuid(), name: z.string().trim().min(1) }))
-      .min(MIN_SPEAKERS)
-      .max(MAX_SPEAKERS),
+    speakers: z.array(z.object({ id: z.uuid(), name: z.string() })),
     transcript: transcriptSchema,
     summary: summarySchema,
     actionItems: z
@@ -50,18 +48,24 @@ export const sampleMeetingFixtureSchema = z
       });
     }
 
-    const names = new Set<string>();
-    fixture.speakers.forEach((speaker, index) => {
-      const key = speaker.name.toLocaleLowerCase();
-      if (names.has(key)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["speakers", index, "name"],
-          message: "Speaker names must be unique",
-        });
+    // The same title and Speaker rules every Meeting is created under.
+    try {
+      validateMeetingInput({
+        title: fixture.title,
+        speakers: fixture.speakers.map((speaker) => speaker.name),
+        agenda: fixture.agenda,
+      });
+    } catch (error) {
+      if (!(error instanceof MeetingValidationError)) throw error;
+      for (const issue of error.issues) {
+        // Issue paths are dotted ("speakers.1"); a Speaker's name lives one level deeper here.
+        const path: PropertyKey[] = issue.path
+          .split(".")
+          .map((part) => (/^\d+$/.test(part) ? Number(part) : part));
+        if (path[0] === "speakers" && path.length === 2) path.push("name");
+        ctx.addIssue({ code: "custom", path, message: issue.message });
       }
-      names.add(key);
-    });
+    }
 
     // The same Meeting-dependent rules the pipeline applies to a provider's answer.
     const speakerIds = fixture.speakers.map((speaker) => speaker.id);

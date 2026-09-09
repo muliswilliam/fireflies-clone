@@ -8,7 +8,7 @@ export function SampleBadge({ className }: { className?: string }) {
   return (
     <Badge
       variant="outline"
-      title="Seeded with the app as an example"
+      title="Seeded with the app so the workspace is never empty"
       className={cn("text-muted-foreground", className)}
     >
       <Sparkles data-icon="inline-start" aria-hidden="true" />

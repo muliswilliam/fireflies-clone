@@ -3,7 +3,7 @@
   "title": "Mobile onboarding funnel review",
   "agenda": "August funnel numbers\nWhere the drop-off is happening\nWhat we test next",
   "recordingStartedAt": "2026-09-03T14:30:00.000Z",
-  "recordingEndedAt": "2026-09-03T14:47:00.000Z",
+  "recordingEndedAt": "2026-09-03T14:37:00.000Z",
   "speakers": [
     {
       "id": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
@@ -22,194 +22,194 @@
     "utterances": [
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 3000,
-        "endMs": 38728,
+        "startMs": 2500,
+        "endMs": 16800,
         "text": "Thanks for making time. I want to go through the August onboarding numbers on mobile, agree on where the real drop-off is, and pick the next experiment. Diego, can you take us through the funnel?"
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 40915,
-        "endMs": 91226,
+        "startMs": 17500,
+        "endMs": 37800,
         "text": "Sure. August had about sixty-two thousand installs across both platforms. Of those, eighty-one percent opened the app, sixty-four percent got to the sign-up screen, forty-one percent completed sign-up, and nineteen percent finished the first project setup. That last step is the one we care about because it predicts week-one retention."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 96133,
-        "endMs": 109501,
+        "startMs": 40019,
+        "endMs": 45119,
         "text": "So from sign-up complete to project setup we lose more than half."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 112996,
-        "endMs": 135113,
+        "startMs": 47257,
+        "endMs": 55957,
         "text": "Right. Forty-one to nineteen. And that step has barely moved since May, while the earlier steps improved when we shortened sign-up."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 141328,
-        "endMs": 164417,
+        "startMs": 58014,
+        "endMs": 67114,
         "text": "Do we know what people are doing in that gap? Are they leaving the app, or getting stuck on a specific screen?"
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 169220,
-        "endMs": 212725,
+        "startMs": 69090,
+        "endMs": 86590,
         "text": "Both, but mostly getting stuck. The project setup flow has four screens: name, template, invite teammates, and connect a data source. Sixty percent of the people who drop do it on the connect-a-data-source screen. The invite screen is second at about twenty-five percent."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 216116,
-        "endMs": 255732,
+        "startMs": 88485,
+        "endMs": 104385,
         "text": "That matches what I'm hearing in the user interviews. People don't have their credentials on their phone. They're on the bus, they install the app, and then we ask them for an API key or a database connection string."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 261842,
-        "endMs": 280071,
+        "startMs": 106199,
+        "endMs": 113299,
         "text": "So the screen isn't confusing, it's asking for something they physically can't give us at that moment."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 284769,
-        "endMs": 309803,
+        "startMs": 115032,
+        "endMs": 124932,
         "text": "Exactly. Three of the eight people I spoke to last week said they planned to finish setup on their laptop later and then forgot."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 313089,
-        "endMs": 345901,
+        "startMs": 126584,
+        "endMs": 139684,
         "text": "Which lines up with the data. Of the people who drop on that screen, about fifteen percent come back within seven days and finish on web. The rest we never see again."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 351907,
-        "endMs": 385690,
+        "startMs": 141255,
+        "endMs": 154755,
         "text": "What options do we have? I can think of three: make the data source step skippable, let people set up with sample data first, or send them a link to finish on desktop."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 390284,
-        "endMs": 423095,
+        "startMs": 156245,
+        "endMs": 169345,
         "text": "I'd argue skippable and sample data are the same experiment. If you skip, you land in an empty project, which is its own drop-off. Sample data gives them something to look at."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 426277,
-        "endMs": 463949,
+        "startMs": 170754,
+        "endMs": 185854,
         "text": "The desktop hand-off is cheap to build but I'm sceptical it moves the number. We already send a welcome email with a link and open rates are fine but click-through to finish setup is under four percent."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 469850,
-        "endMs": 479329,
+        "startMs": 187182,
+        "endMs": 190682,
         "text": "So sample data. What would that look like?"
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 483818,
-        "endMs": 528296,
+        "startMs": 191929,
+        "endMs": 209829,
         "text": "On the connect screen, a second button: 'Explore with sample data'. It creates a project with a realistic demo dataset and drops them straight into the dashboard with a persistent banner to connect their own source. Design has a rough version from the spring."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 531373,
-        "endMs": 555435,
+        "startMs": 210995,
+        "endMs": 220495,
         "text": "What counts as completing setup in that case? If we count the sample-data path, the metric goes up mechanically and we learn nothing."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 561232,
-        "endMs": 592099,
+        "startMs": 221580,
+        "endMs": 233880,
         "text": "Good point. Let's keep the primary metric as 'connected a real data source within seven days', across mobile and web. Sample data is a means to that, not the outcome."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 596484,
-        "endMs": 626379,
+        "startMs": 234884,
+        "endMs": 246784,
         "text": "Then I'd expect the seven-day number to be a better test anyway, because the hypothesis is that people who see value on the phone come back on the laptop."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 629351,
-        "endMs": 649524,
+        "startMs": 247707,
+        "endMs": 255607,
         "text": "Agreed. And a secondary metric of week-one retention so we can see if they're at least using the app."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 655216,
-        "endMs": 666639,
+        "startMs": 256449,
+        "endMs": 260749,
         "text": "What about the invite screen? Twenty-five percent is not small."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 670919,
-        "endMs": 701786,
+        "startMs": 261510,
+        "endMs": 273810,
         "text": "In interviews it's mostly solo users who feel they have to add someone. Making it clearly optional with a 'just me for now' option would probably fix most of it."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 704654,
-        "endMs": 731632,
+        "startMs": 276090,
+        "endMs": 286790,
         "text": "That's a copy and layout change, we can ship it outside the experiment. I'd rather not bundle it, or we won't know which change did what."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 737220,
-        "endMs": 766142,
+        "startMs": 288989,
+        "endMs": 300489,
         "text": "Fine. Ship the invite change straight away as a fix, and run sample data as the experiment. Diego, what's the sample size and how long do we need?"
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 770318,
-        "endMs": 810907,
+        "startMs": 302607,
+        "endMs": 318907,
         "text": "To detect a five-point lift on a nineteen percent base at ninety-five percent confidence we need about thirteen hundred sign-ups per arm. At current volume that's roughly ten days. I'd run it for two full weeks to cover weekly cycles."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 813670,
-        "endMs": 828982,
+        "startMs": 320944,
+        "endMs": 326844,
         "text": "Okay. Leah, how long to get the sample data flow to a shippable state?"
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 834465,
-        "endMs": 863388,
+        "startMs": 328800,
+        "endMs": 340300,
         "text": "Design needs a week to finalise the demo dataset and the banner. Engineering estimated about two weeks after that. So we could start the experiment around the twenty-ninth."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 867459,
-        "endMs": 883743,
+        "startMs": 342175,
+        "endMs": 348475,
         "text": "Can we pull the dataset from an existing demo? Marketing has one for the website."
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 886402,
-        "endMs": 904631,
+        "startMs": 350269,
+        "endMs": 357369,
         "text": "Possibly. I'll check whether it's realistic enough. If it is, that saves most of the design week."
       },
       {
         "speakerId": "a30e205e-58fb-438e-9739-f0016b464a0f",
-        "startMs": 910010,
-        "endMs": 946710,
+        "startMs": 359082,
+        "endMs": 373782,
         "text": "One more thing. iOS and Android drop at different rates on that screen: sixty-eight versus fifty-three percent. The Android connect screen has a paste-from-clipboard shortcut that iOS doesn't. It might be worth adding on iOS regardless."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 950677,
-        "endMs": 966961,
+        "startMs": 375414,
+        "endMs": 381714,
         "text": "Add it to the fix list with the invite change. Anything else before we wrap?"
       },
       {
         "speakerId": "4e7f5e3d-4c3e-477c-a9f6-fd06ba9e30a3",
-        "startMs": 969515,
-        "endMs": 992605,
+        "startMs": 383265,
+        "endMs": 392365,
         "text": "Just that I'd like the experiment write-up in the shared doc by Friday so the wider team can comment before we build."
       },
       {
         "speakerId": "4d9b7755-9e98-4c92-a562-e2687806e1f2",
-        "startMs": 997879,
-        "endMs": 1015136,
+        "startMs": 393835,
+        "endMs": 400535,
         "text": "I'll draft it. Diego, send me the sample size calculation and I'll include it. Thanks both."
       }
     ]
