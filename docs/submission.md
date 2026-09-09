@@ -50,4 +50,4 @@ Smaller calls worth naming: Next.js App Router with server actions to keep the r
 
 ## Time spent
 
-About **10 hours** of active work over two days, recorded session by session in [`TIME.md`](../TIME.md): 1.5 hours of grilling, glossary, ADRs and ticket breakdown, 7.9 hours across the ten feature and infrastructure issues, and 0.6 hours on this polish and submission pass.
+About **10.3 hours** of active work over two days, recorded session by session in [`TIME.md`](../TIME.md): 1.5 hours of grilling, glossary, ADRs and ticket breakdown, 7.9 hours across the ten feature and infrastructure issues, and 0.9 hours on this polish and submission pass, including code review and the live checks.
