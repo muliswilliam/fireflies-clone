@@ -11,6 +11,15 @@ import {
 /** Beta header for `fallbacks: "default"`: a refusal is re-run server-side on Anthropic's recommended model. */
 export const SERVER_SIDE_FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
+/**
+ * Only the models that run safety classifiers (and so can answer with `stop_reason: "refusal"`)
+ * accept the `fallbacks` parameter; every other model rejects the whole request with a 400.
+ * The Models API does not publish this, so the rule lives here: Opus 5 and the Fable/Mythos 5 line.
+ */
+export function supportsServerSideFallbacks(model: string): boolean {
+  return /^claude-(opus-5|fable-5|mythos-5)(-|$)/.test(model);
+}
+
 export type AnthropicStructuredGeneratorConfig = {
   client: Anthropic;
   model: string;
@@ -34,14 +43,16 @@ async function requestMessage<T>(
 ): Promise<Anthropic.Beta.BetaMessage> {
   // Only the derived JSON Schema is sent; parseStructuredOutput validates so failures name the issue.
   const { schema } = betaZodOutputFormat(request.schema);
+  const fallbacks = supportsServerSideFallbacks(model)
+    ? { betas: [SERVER_SIDE_FALLBACK_BETA], fallbacks: "default" as const }
+    : {};
   try {
     // Streaming keeps long generations clear of HTTP timeouts.
     return await client.beta.messages
       .stream({
         model,
         max_tokens: request.maxTokens,
-        betas: [SERVER_SIDE_FALLBACK_BETA],
-        fallbacks: "default",
+        ...fallbacks,
         thinking: { type: "adaptive" },
         output_config: {
           effort: request.effort,
