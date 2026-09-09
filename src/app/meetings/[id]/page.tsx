@@ -16,7 +16,13 @@ import { SummaryView } from "@/components/meetings/summary-view";
 import { TranscriptView } from "@/components/meetings/transcript-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FailedStep } from "@/lib/db/schema";
-import { getMeetingService, type Meeting } from "@/lib/meetings";
+import {
+  getMeetingService,
+  hasSettledSummary,
+  MeetingNotFoundError,
+  type Meeting,
+  type SummaryExport,
+} from "@/lib/meetings";
 
 import { ActionItemsList } from "./action-items-list";
 import { DeleteMeetingButton } from "./delete-meeting-button";
@@ -45,10 +51,7 @@ export default async function MeetingPage({
   const { id } = await params;
   const meeting = await loadMeeting(id);
   if (!meeting) notFound();
-  // Export is offered as soon as there is a settled Summary, and stays off until then.
-  const exported = hasSettledSummary(meeting)
-    ? await getMeetingService().exportSummaryMarkdown(meeting.id)
-    : null;
+  const summaryExport = await loadSummaryExport(meeting);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-10 sm:px-8">
@@ -66,7 +69,7 @@ export default async function MeetingPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={meeting.status} className="mr-2" />
-          <ExportSummaryMenu exported={exported} />
+          <ExportSummaryMenu summaryExport={summaryExport} />
           <DeleteMeetingButton meetingId={meeting.id} title={meeting.title} />
         </div>
       </header>
@@ -212,14 +215,18 @@ function ActionItemsPanel({ meeting }: { meeting: Meeting }) {
   return <SummaryProcessing meeting={meeting} />;
 }
 
-/** A Summary that is not about to be replaced: the Meeting is ready, or failed while keeping it. */
-function hasSettledSummary(
+/** The Export menu's payload: the Markdown once the Summary is settled, `null` until then. */
+async function loadSummaryExport(
   meeting: Meeting,
-): meeting is Meeting & { summary: NonNullable<Meeting["summary"]> } {
-  return (
-    meeting.summary !== null &&
-    (meeting.status === "ready" || meeting.status === "failed")
-  );
+): Promise<SummaryExport | null> {
+  if (!hasSettledSummary(meeting)) return null;
+  try {
+    return await getMeetingService().exportSummaryMarkdown(meeting.id);
+  } catch (error) {
+    // Deleted between the two reads: the page is gone, not broken.
+    if (error instanceof MeetingNotFoundError) notFound();
+    throw error;
+  }
 }
 
 /** The schema guarantees `failed_step` is set whenever the Status is failed; this narrows the type once. */

@@ -42,6 +42,7 @@ import {
   summarizationOutputSchemaFor,
   summarySchema,
   type SummarizationOutput,
+  type Summary,
 } from "./summary";
 import {
   targetUtteranceCount,
@@ -538,13 +539,18 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     if (deleted.length === 0) throw new MeetingNotFoundError(id);
   }
 
-  /** The Summary and Action Items as a Markdown document, once there is a Summary to export. */
+  /**
+   * The Summary and Action Items as a Markdown document. Only a settled Summary is exported:
+   * while a regenerate is in flight the old one is about to be replaced, so export waits.
+   */
   async function exportSummaryMarkdown(id: string): Promise<SummaryExport> {
     const meeting = await requireMeeting(db, id);
-    if (!meeting.summary) throw new SummaryNotReadyError(id, meeting.status);
+    if (!hasSettledSummary(meeting)) {
+      throw new SummaryNotReadyError(id, meeting.status);
+    }
     return {
       filename: summaryMarkdownFilename(meeting.title),
-      markdown: summaryMarkdown({ ...meeting, summary: meeting.summary }),
+      markdown: summaryMarkdown(meeting),
     };
   }
 
@@ -697,6 +703,19 @@ type MeetingKindColumns = Required<
 >;
 
 export type MeetingService = ReturnType<typeof createMeetingService>;
+
+/**
+ * A Summary that is not about to be replaced: the Meeting is ready, or failed while keeping it
+ * (a failed regenerate). This is what "the Summary is ready" means for reading and exporting.
+ */
+export function hasSettledSummary(
+  meeting: Meeting,
+): meeting is Meeting & { summary: Summary } {
+  return (
+    meeting.summary !== null &&
+    (meeting.status === "ready" || meeting.status === "failed")
+  );
+}
 
 /** ADR-0004: JSONB is validated on read as well as write, so a corrupt row fails loudly here. */
 function validateStoredDocuments<M extends Meeting>(meeting: M): M {

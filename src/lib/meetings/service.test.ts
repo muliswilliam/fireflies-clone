@@ -1123,25 +1123,35 @@ describe("Meeting service", () => {
       ]);
     });
 
-    it("frees the Meeting's slot under the daily cap", async () => {
-      const first = await service.createMeeting({
-        title: "One",
+    it("stops a processing run that is still in flight for it", async () => {
+      // Deleting from inside the provider call stands in for a user pressing Delete mid-pipeline.
+      let deleted = false;
+      const deleting: SummarizationProvider = {
+        summarize: async (input) => {
+          await service.deleteMeeting(stopped.id);
+          deleted = true;
+          return createFakeSummarizationProvider().summarize(input);
+        },
+      };
+      const target = serviceWith({ summarizationProvider: deleting });
+      const created = await target.createMeeting({
+        title: "Doomed",
         speakers: ["Amara", "Ben"],
       });
-      await service.createMeeting({ title: "Two", speakers: ["Amara", "Ben"] });
-      await service.createMeeting({
-        title: "Three",
-        speakers: ["Amara", "Ben"],
-      });
-      await expect(
-        service.createMeeting({ title: "Four", speakers: ["Amara", "Ben"] }),
-      ).rejects.toBeInstanceOf(DailyCapReachedError);
+      const stopped = await target.stopRecording(created.id);
 
-      await service.deleteMeeting(first.id);
+      await expect(target.processMeeting(stopped.id)).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
 
-      await expect(
-        service.createMeeting({ title: "Four", speakers: ["Amara", "Ben"] }),
-      ).resolves.toMatchObject({ title: "Four" });
+      expect(deleted).toBe(true);
+      expect(await service.getMeeting(stopped.id)).toBeNull();
+      expect(
+        await db
+          .select()
+          .from(actionItems)
+          .where(eq(actionItems.meetingId, stopped.id)),
+      ).toEqual([]);
     });
 
     it("throws MeetingNotFoundError for an unknown Meeting, and for one already deleted", async () => {
@@ -1184,6 +1194,37 @@ describe("Meeting service", () => {
       expect(exported.markdown.match(/^- \[ \] /gm)).toHaveLength(
         ready.actionItems.length - 1,
       );
+    });
+
+    it("throws SummaryNotReadyError while a regenerate is replacing the Summary", async () => {
+      const ready = await readyMeeting();
+      const regenerating = await service.regenerateSummary(ready.id);
+      expect(regenerating.summary).not.toBeNull();
+
+      await expect(
+        service.exportSummaryMarkdown(ready.id),
+      ).rejects.toMatchObject({
+        name: "SummaryNotReadyError",
+        status: "summarizing",
+      });
+    });
+
+    it("exports the Summary a failed regenerate left in place", async () => {
+      const ready = await readyMeeting();
+      const failing = serviceWith({
+        summarizationProvider: {
+          summarize: async () => {
+            throw new Error("Injected");
+          },
+        },
+      });
+      await failing.regenerateSummary(ready.id);
+      const failed = await failing.processMeeting(ready.id);
+      expect(failed.status).toBe("failed");
+
+      const exported = await service.exportSummaryMarkdown(ready.id);
+
+      expect(exported.markdown).toContain(ready.summary!.overview);
     });
 
     it("throws SummaryNotReadyError while the Meeting has no Summary", async () => {

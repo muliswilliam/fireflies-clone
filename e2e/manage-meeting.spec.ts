@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test, type Page } from "@playwright/test";
 
 /** An Instant Meeting is the fastest way to a ready Summary. Returns the Meeting id. */
@@ -132,9 +134,7 @@ test.describe("export", () => {
     expect(download.suggestedFilename()).toBe(
       `${title.toLowerCase().replaceAll(" ", "-")}.md`,
     );
-    const path = await download.path();
-    const { readFile } = await import("node:fs/promises");
-    expect(await readFile(path, "utf8")).toBe(copied);
+    expect(await readFile(await download.path(), "utf8")).toBe(copied);
   });
 
   test("export is disabled until the Summary is ready", async ({ page }) => {
@@ -147,8 +147,11 @@ test.describe("export", () => {
 
     const exportButton = page.getByRole("button", { name: "Export" });
     await expect(exportButton).toBeDisabled();
+    await expect(
+      page.getByTitle("Available once the Summary is ready"),
+    ).toBeVisible();
     await expect(exportButton).toHaveAttribute(
-      "title",
+      "aria-description",
       "Available once the Summary is ready",
     );
   });

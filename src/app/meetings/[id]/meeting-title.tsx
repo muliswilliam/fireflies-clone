@@ -5,10 +5,9 @@ import { useId, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MEETING_TITLE_REQUIRED_MESSAGE } from "@/lib/meetings/validation";
 
 import { renameMeetingAction } from "./actions";
-
-const EMPTY_TITLE_MESSAGE = "Give the Meeting a title";
 
 /**
  * The Meeting title as a heading with a Rename control. Renaming swaps the heading for an
@@ -35,7 +34,7 @@ export function MeetingTitle({
   function save() {
     const next = inputRef.current?.value ?? "";
     if (next.trim().length === 0) {
-      setError(EMPTY_TITLE_MESSAGE);
+      setError(MEETING_TITLE_REQUIRED_MESSAGE);
       inputRef.current?.focus();
       return;
     }

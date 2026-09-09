@@ -6,6 +6,8 @@ import { getEnv } from "@/lib/env";
 
 import { createMeetingService, type MeetingService } from "./service";
 
+export { hasSettledSummary } from "./service";
+
 export {
   ActionItemNotFoundError,
   DailyCapReachedError,
@@ -33,6 +35,7 @@ export {
   DEFAULT_INSTANT_MEETING_DURATION_MINUTES,
   INSTANT_MEETING_DURATION_OPTIONS_MINUTES,
   MAX_SPEAKERS,
+  MEETING_TITLE_REQUIRED_MESSAGE,
   MIN_SPEAKERS,
 } from "./validation";
 

@@ -1,5 +1,8 @@
 import { MeetingValidationError, type MeetingValidationIssue } from "./errors";
 
+/** Shown wherever a blank title is refused, on the server and inline in the client. */
+export const MEETING_TITLE_REQUIRED_MESSAGE = "Give the Meeting a title";
+
 export const MIN_SPEAKERS = 2;
 export const MAX_SPEAKERS = 6;
 
@@ -129,7 +132,7 @@ function checkTitleRule(raw: string): {
     title,
     issue:
       title.length === 0
-        ? { path: "title", message: "Give the Meeting a title" }
+        ? { path: "title", message: MEETING_TITLE_REQUIRED_MESSAGE }
         : null,
   };
 }
