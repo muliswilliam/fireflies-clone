@@ -18,5 +18,6 @@ over 20 minutes excluded.
 | 2026-09-09 | #9 Manage a Meeting: rename, delete, export; Sonnet 5 fallbacks fix | 1.0   |
 | 2026-09-09 | #10 Sample Meetings: fixtures, seeder, badge, e2e, code review      | 0.5   |
 | 2026-09-09 | #11 Deploy to Dokploy: project, GitHub App, DNS, live checks, docs  | 0.6   |
+| 2026-09-09 | #12 Polish: accent, skeletons, error boundaries, responsive pass, docs | 0.6   |
 
-Total: 9.4 h
+Total: 10.0 h

@@ -15,12 +15,12 @@ const STEP_STYLES: Record<
   { marker: string; label: string; connector: string }
 > = {
   complete: {
-    marker: "border-foreground bg-foreground text-background",
+    marker: "border-primary bg-primary text-primary-foreground",
     label: "",
-    connector: "bg-foreground",
+    connector: "bg-primary",
   },
   current: {
-    marker: "border-foreground text-foreground ring-4 ring-foreground/10",
+    marker: "border-primary text-primary ring-4 ring-primary/15",
     label: "",
     connector: "bg-border",
   },

@@ -7,6 +7,7 @@ import {
 } from "./fake-transcription-provider";
 import {
   failureMarkerIn,
+  throwIfPageFaultRequested,
   withSummarizationFaultInjection,
   withTranscriptionFaultInjection,
 } from "./fault-injection";
@@ -115,5 +116,22 @@ describe("withSummarizationFaultInjection", () => {
     await expect(
       provider.summarize(summarizationInput("Sync [fail:transcribing]")),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("throwIfPageFaultRequested", () => {
+  it("throws for a search that carries the [fail:page] marker", () => {
+    expect(() => throwIfPageFaultRequested("[fail:page]")).toThrow(
+      /Injected page failure/,
+    );
+    expect(() => throwIfPageFaultRequested("sync [fail:page]")).toThrow();
+  });
+
+  it("does nothing for any other search, including the provider markers", () => {
+    expect(() => throwIfPageFaultRequested("")).not.toThrow();
+    expect(() => throwIfPageFaultRequested("Q3 roadmap sync")).not.toThrow();
+    expect(() =>
+      throwIfPageFaultRequested("Sync [fail:transcribing]"),
+    ).not.toThrow();
   });
 });

@@ -62,3 +62,16 @@ export function withSummarizationFaultInjection(
     },
   };
 }
+
+const PAGE_MARKER = "[fail:page]";
+
+/**
+ * Makes a page render throw when the text it is given (the list search, for instance)
+ * carries `[fail:page]`, so an end-to-end test can see the error boundary. Callers gate it on
+ * `E2E_FAULT_INJECTION`, like the provider wrappers above.
+ */
+export function throwIfPageFaultRequested(text: string): void {
+  if (text.includes(PAGE_MARKER)) {
+    throw new Error(`Injected page failure for "${text}"`);
+  }
+}
