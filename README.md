@@ -92,14 +92,14 @@ Production runs at [fireflies.williammuli.dev](https://fireflies.williammuli.dev
 
 ### Topology
 
-- **Dokploy project `fireflies`, environment `production`**, on one Dokploy-managed server. Two services live in it:
+- **Dokploy project `fireflies`, environment `production`**, on the Dokploy server named `eprocurement prod server`. Two services live in it:
   - **Application `app`**: source is this GitHub repository, branch `main`, built from the `Dockerfile` (multi-stage, Next standalone output), one replica listening on port 3000. Trigger type is push, so a GitHub webhook from the Dokploy GitHub App starts a build for every commit on `main`; the new container replaces the old one once it is up.
   - **Postgres `db`**: `postgres:18` with its data on a named Docker volume. It has no external port; the app reaches it over Dokploy's internal Docker network, which is what `DATABASE_URL` points at.
 - **Environment** is set on the application in Dokploy: `DATABASE_URL` (internal hostname of `db`), `ANTHROPIC_API_KEY`, `AI_PROVIDER=claude`, `AI_MODEL` and `MAX_MEETINGS_PER_DAY`. `.env.example` documents each one. Nothing is baked into the image.
-- **Container start** runs `docker-entrypoint.sh`: apply Drizzle migrations, seed the Sample Meetings, then start the server. Both steps are idempotent, so a redeploy or restart is safe. The image's `HEALTHCHECK` polls `GET /api/health`, which also proves the database connection.
+- **Container start** is the entrypoint described under Docker above (migrate, seed, serve). Both steps are idempotent, so a redeploy or restart is safe. The image's `HEALTHCHECK` polls `GET /api/health`.
 - **Domain** `fireflies.williammuli.dev` is attached to `app` in Dokploy with a Let's Encrypt certificate; Dokploy's Traefik terminates TLS and redirects HTTP to HTTPS. DNS is a proxied Cloudflare A record for the server, so Cloudflare sits in front of Traefik.
 
-Check a deployment landed: the Dokploy deployments list shows the commit title and `done`, and `curl -i https://fireflies.williammuli.dev/api/health` returns `200 {"status":"ok","database":"ok"}`. Application logs in Dokploy show the three entrypoint steps on every start.
+Check a deployment landed: the Dokploy deployments list shows the commit title and `done`, the health route on the live URL returns 200, and the application logs in Dokploy show the three entrypoint steps.
 
 ### The two human steps
 
