@@ -15,5 +15,6 @@ over 20 minutes excluded.
 | 2026-09-08 | #7 Instant Meeting                                                  | 0.4   |
 | 2026-09-08 | #8 Model-backed providers, Anthropic adapter (start)                | 0.5   |
 | 2026-09-09 | #8 Model-backed providers, Anthropic adapter (finish, test, merge)  | 1.4   |
+| 2026-09-09 | #9 Manage a Meeting: rename, delete, export; Sonnet 5 fallbacks fix | 1.0   |
 
-Total: 7.3 h
+Total: 8.3 h
