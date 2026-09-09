@@ -90,6 +90,14 @@ test("record, stop, and read the Transcript", async ({ page }) => {
   await expect(items.first().getByRole("checkbox")).toBeChecked();
   await expect(items.nth(1).getByRole("checkbox")).not.toBeChecked();
 
+  // Clicking the item's text toggles it as well, both ways.
+  const secondLabel = items.nth(1).locator("label");
+  await secondLabel.click();
+  await expect(items.nth(1).getByRole("checkbox")).toBeChecked();
+  await expect(items.nth(1)).toHaveAttribute("data-done", "true");
+  await secondLabel.click();
+  await expect(items.nth(1).getByRole("checkbox")).not.toBeChecked();
+
   // Regenerating warns that done state is lost, runs summarizing again, and resets it.
   await page.getByRole("tab", { name: "Summary" }).click();
   await page.getByRole("button", { name: "Regenerate" }).click();

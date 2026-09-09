@@ -58,6 +58,7 @@ function ActionItemRow({
   item: ActionItem;
   owner: Speaker | null;
 }) {
+  const inputId = useId();
   const labelId = useId();
   const [pending, startTransition] = useTransition();
   // Show the flip at once; the server's answer replaces it when the page re-renders.
@@ -76,6 +77,7 @@ function ActionItemRow({
       className="flex items-start gap-3 px-4 py-3 first:rounded-t-xl last:rounded-b-xl"
     >
       <Checkbox
+        id={inputId}
         checked={done}
         onCheckedChange={toggle}
         disabled={pending}
@@ -83,15 +85,18 @@ function ActionItemRow({
         className="mt-1"
       />
       <div className="min-w-0 flex-1">
-        <p
+        {/* A real label for the checkbox's input, so clicking the text toggles the item too. */}
+        <label
           id={labelId}
+          htmlFor={inputId}
           className={cn(
-            "text-sm leading-6",
+            "block cursor-pointer text-sm leading-6 select-none",
             done && "text-muted-foreground line-through",
+            pending && "cursor-default",
           )}
         >
           {item.text}
-        </p>
+        </label>
         <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           {owner ? (
             <span className="flex items-center gap-1.5">
