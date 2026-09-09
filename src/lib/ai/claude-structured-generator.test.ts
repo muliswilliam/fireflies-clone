@@ -166,14 +166,27 @@ describe("Claude structured generator", () => {
       system: "You answer tersely.",
       messages: [{ role: "user", content: "What is the capital of France?" }],
     });
-    const format = (body.output_config as { format: Record<string, unknown> })
-      .format;
+    const { effort, format } = body.output_config as {
+      effort?: string;
+      format: Record<string, unknown>;
+    };
+    expect(effort).toBeUndefined();
     expect(format.type).toBe("json_schema");
     expect(format.schema).toMatchObject({
       type: "object",
       additionalProperties: false,
       required: ["answer", "confidence"],
     });
+  });
+
+  it("passes the requested effort through", async () => {
+    const { generator, captured } = generatorWith(() =>
+      sseResponse(
+        textStream(JSON.stringify({ answer: "Paris", confidence: 99 })),
+      ),
+    );
+    await generator.generate({ ...REQUEST, effort: "low" });
+    expect(captured[0].body.output_config).toMatchObject({ effort: "low" });
   });
 
   it("rejects output that the Zod schema refuses, naming the document and the problem", async () => {

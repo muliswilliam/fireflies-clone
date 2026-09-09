@@ -46,6 +46,7 @@ describe("Claude TranscriptionProvider", () => {
     expect(requests).toHaveLength(1);
     const [request] = requests;
     expect(request.document).toBe("Transcript");
+    expect(request.effort).toBe("low");
     expect(request.system).toMatch(/Transcript/);
     for (const speaker of SPEAKERS) {
       expect(request.prompt).toContain(speaker.name);
@@ -58,6 +59,27 @@ describe("Claude TranscriptionProvider", () => {
     expect(request.prompt).toContain("600000");
     expect(request.prompt).toContain("10:00");
     expect(request.prompt).toMatch(/exactly 50 Utterances/);
+  });
+
+  it("anchors the timeline: Utterance numbers with start times up to the last one", async () => {
+    const { generator, requests } = generatorAnswering(TRANSCRIPT);
+    await createClaudeTranscriptionProvider(generator).generateTranscript(
+      INPUT,
+    );
+    // 50 Utterances over 10 minutes: one every 12 s, anchors every 6 Utterances, ending on the 50th.
+    expect(requests[0].prompt).toContain(
+      "1 at 00:00, 7 at 01:12, 13 at 02:24, 19 at 03:36, 25 at 04:48, 31 at 06:00, 37 at 07:12, 43 at 08:24, 49 at 09:36, 50 at 09:48",
+    );
+  });
+
+  it("tells the model the pace: average seconds and words per Utterance", async () => {
+    const { generator, requests } = generatorAnswering(TRANSCRIPT);
+    await createClaudeTranscriptionProvider(generator).generateTranscript(
+      INPUT,
+    );
+    // 10 minutes over 50 Utterances is 12 s each, about 30 words at 150 words a minute.
+    expect(requests[0].prompt).toMatch(/about 12 seconds/);
+    expect(requests[0].prompt).toMatch(/about 30 words/);
   });
 
   it("says so when the Meeting has no agenda", async () => {

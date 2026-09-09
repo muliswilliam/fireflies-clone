@@ -110,8 +110,12 @@ export type MeetingServiceConfig = {
 
 const CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Generous next to the 10 to 25 s a Claude call takes (ADR-0002), but a hung call must not stall a Meeting forever. */
-export const PROVIDER_TIMEOUT_MS = 90_000;
+/**
+ * An 80-Utterance Transcript is about 7,500 output tokens and takes Claude Opus 5 around 90 s
+ * (ADR-0002); this leaves headroom for a slow day, while a hung call still cannot stall a
+ * Meeting forever. A whole number of minutes so the failure message reads exactly.
+ */
+export const PROVIDER_TIMEOUT_MS = 4 * 60_000;
 
 /** Serialises cap checks so two concurrent creates cannot both pass at the boundary. */
 const CAP_LOCK_KEY = "meetings:daily-cap";

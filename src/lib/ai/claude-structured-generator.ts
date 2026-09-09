@@ -18,7 +18,11 @@ export type StructuredRequest<T> = {
   /** The response must satisfy this schema; its JSON Schema is sent as the output format. */
   schema: z.ZodType<T>;
   maxTokens: number;
+  /** How much Claude may think before answering; omitted means the API default (high). */
+  effort?: Effort;
 };
+
+export type Effort = NonNullable<Anthropic.Beta.BetaOutputConfig["effort"]>;
 
 /**
  * One Claude call that must answer with a JSON document matching a Zod schema.
@@ -68,7 +72,10 @@ async function requestMessage<T>(
         betas: [SERVER_SIDE_FALLBACK_BETA],
         fallbacks: "default",
         thinking: { type: "adaptive" },
-        output_config: { format: { type: "json_schema", schema } },
+        output_config: {
+          effort: request.effort,
+          format: { type: "json_schema", schema },
+        },
         system: request.system,
         messages: [{ role: "user", content: request.prompt }],
       })
