@@ -18,7 +18,7 @@ export type TranscriptionInput = {
 
 /**
  * Produces a Transcript for a finished Recording (ADR-0001).
- * Implementations: a deterministic fake for tests and, in #8, Claude.
+ * Implementations: a deterministic fake for tests, and a model-backed one over a StructuredGenerator.
  * Callers validate the result with `transcriptSchemaFor`; a rejected result is a provider error.
  */
 export interface TranscriptionProvider {

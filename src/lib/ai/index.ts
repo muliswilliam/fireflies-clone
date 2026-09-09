@@ -1,7 +1,13 @@
 import "server-only";
 
+import Anthropic from "@anthropic-ai/sdk";
+
 import { getEnv } from "@/lib/env";
 
+import { createAnthropicStructuredGenerator } from "./anthropic-structured-generator";
+import type { StructuredGenerator } from "./structured-generator";
+import { createLlmSummarizationProvider } from "./llm-summarization-provider";
+import { createLlmTranscriptionProvider } from "./llm-transcription-provider";
 import { createFakeSummarizationProvider } from "./fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "./fake-transcription-provider";
 import {
@@ -42,15 +48,7 @@ function selectTranscriptionProvider(): TranscriptionProvider {
     case "fake":
       return createFakeTranscriptionProvider();
     case "claude":
-      // #8 replaces this with the Claude adapter. Failing inside the pipeline, rather than at
-      // startup, keeps the rest of the app usable and shows the reason on the Meeting.
-      return {
-        async generateTranscript() {
-          throw new Error(
-            "The Claude TranscriptionProvider is not available yet. Set AI_PROVIDER=fake.",
-          );
-        },
-      };
+      return createLlmTranscriptionProvider(createAnthropicGenerator());
   }
 }
 
@@ -59,13 +57,15 @@ function selectSummarizationProvider(): SummarizationProvider {
     case "fake":
       return createFakeSummarizationProvider();
     case "claude":
-      // #8 replaces this with the Claude adapter; see getTranscriptionProvider.
-      return {
-        async summarize() {
-          throw new Error(
-            "The Claude SummarizationProvider is not available yet. Set AI_PROVIDER=fake.",
-          );
-        },
-      };
+      return createLlmSummarizationProvider(createAnthropicGenerator());
   }
+}
+
+/** `getEnv` has already insisted on the key when the provider is `claude`. */
+function createAnthropicGenerator(): StructuredGenerator {
+  const env = getEnv();
+  return createAnthropicStructuredGenerator({
+    client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
+    model: env.AI_MODEL,
+  });
 }

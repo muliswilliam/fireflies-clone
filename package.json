@@ -22,6 +22,7 @@
     "build:migrate": "esbuild scripts/migrate.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/migrate.cjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@base-ui/react": "^1.8.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",

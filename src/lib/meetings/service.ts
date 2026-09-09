@@ -31,6 +31,7 @@ import {
   MeetingNotFailedError,
   MeetingNotFoundError,
 } from "./errors";
+import { describeFirstIssue, type ProviderDocument } from "./provider-output";
 import {
   summarizationOutputSchemaFor,
   summarySchema,
@@ -109,8 +110,8 @@ export type MeetingServiceConfig = {
 
 const CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Generous next to the 10 to 25 s a Claude call takes (ADR-0002), but a hung call must not stall a Meeting forever. */
-export const PROVIDER_TIMEOUT_MS = 90_000;
+/** An 80-Utterance Transcript takes Claude Opus 5 about 90-140 s (ADR-0002). Whole minutes so the failure message reads exactly. */
+export const PROVIDER_TIMEOUT_MS = 4 * 60_000;
 
 /** Serialises cap checks so two concurrent creates cannot both pass at the boundary. */
 const CAP_LOCK_KEY = "meetings:daily-cap";
@@ -662,15 +663,14 @@ function validateStoredDocuments<M extends Meeting>(meeting: M): M {
 
 /** Runs a provider's answer through its schema; anything the schema rejects is a provider error. */
 function validateProviderOutput<T>(
-  document: "Transcript" | "Summary",
+  document: ProviderDocument,
   schema: { safeParse: (value: unknown) => z.ZodSafeParseResult<T> },
   generated: unknown,
 ): T {
   const result = schema.safeParse(generated);
   if (!result.success) {
-    const issue = result.error.issues[0];
     throw new Error(
-      `The provider returned an invalid ${document}: ${issue?.message ?? "unknown issue"}`,
+      `The provider returned an invalid ${document}: ${describeFirstIssue(result.error)}`,
     );
   }
   return result.data;
