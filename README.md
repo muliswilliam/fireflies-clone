@@ -92,7 +92,7 @@ Production runs at [fireflies.williammuli.dev](https://fireflies.williammuli.dev
 
 ### Topology
 
-- **Dokploy project `fireflies`, environment `production`**, on the Dokploy server named `eprocurement prod server`. Two services live in it:
+- **Dokploy project `fireflies`, environment `production`**, on the Dokploy server. Two services live in it:
   - **Application `app`**: source is this GitHub repository, branch `main`, built from the `Dockerfile` (multi-stage, Next standalone output), one replica listening on port 3000. Trigger type is push, so a GitHub webhook from the Dokploy GitHub App starts a build for every commit on `main`; the new container replaces the old one once it is up.
   - **Postgres `db`**: `postgres:18` with its data on a named Docker volume. It has no external port; the app reaches it over Dokploy's internal Docker network, which is what `DATABASE_URL` points at.
 - **Environment** is set on the application in Dokploy: `DATABASE_URL` (internal hostname of `db`), `ANTHROPIC_API_KEY`, `AI_PROVIDER=claude`, `AI_MODEL` and `MAX_MEETINGS_PER_DAY`. `.env.example` documents each one. Nothing is baked into the image.
