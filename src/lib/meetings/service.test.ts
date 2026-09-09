@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createFakeSummarizationProvider } from "@/lib/ai/fake-summarization-provider";
@@ -5,7 +6,7 @@ import { createFakeTranscriptionProvider } from "@/lib/ai/fake-transcription-pro
 import type { SummarizationProvider } from "@/lib/ai/summarization-provider";
 import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import { createDb } from "@/lib/db/client";
-import { meetings } from "@/lib/db/schema";
+import { actionItems, meetings, speakers } from "@/lib/db/schema";
 import {
   ActionItemNotFoundError,
   DailyCapReachedError,
@@ -13,6 +14,7 @@ import {
   MeetingNotFoundError,
   MeetingValidationError,
 } from "@/lib/meetings/errors";
+import { summaryMarkdown } from "@/lib/meetings/markdown";
 import {
   createMeetingService,
   type MeetingServiceConfig,
@@ -1034,6 +1036,216 @@ describe("Meeting service", () => {
       await expect(service.retryMeeting("nope")).rejects.toBeInstanceOf(
         MeetingNotFoundError,
       );
+    });
+  });
+
+  describe("renameMeeting", () => {
+    it("changes the title, bumps updated_at, and returns the Meeting", async () => {
+      const ready = await readyMeeting();
+      now = new Date(START.getTime() + 60 * 60_000);
+
+      const renamed = await service.renameMeeting(
+        ready.id,
+        "  Q3 roadmap: final  ",
+      );
+
+      expect(renamed).toEqual({
+        ...ready,
+        title: "Q3 roadmap: final",
+        updatedAt: now,
+      });
+      expect(await service.getMeeting(ready.id)).toEqual(renamed);
+      expect(
+        (await service.listMeetings({})).map((meeting) => meeting.title),
+      ).toEqual(["Q3 roadmap: final"]);
+    });
+
+    it("works on a Meeting that is still recording", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      const renamed = await service.renameMeeting(created.id, "Daily standup");
+
+      expect(renamed.title).toBe("Daily standup");
+      expect(renamed.status).toBe("recording");
+    });
+
+    it("rejects an empty title and leaves the Meeting unchanged", async () => {
+      const ready = await readyMeeting();
+
+      await expect(
+        service.renameMeeting(ready.id, "   "),
+      ).rejects.toMatchObject({
+        name: "MeetingValidationError",
+        issues: [{ path: "title", message: "Give the Meeting a title" }],
+      });
+      expect(await service.getMeeting(ready.id)).toEqual(ready);
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.renameMeeting("00000000-0000-4000-8000-000000000000", "X"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+      await expect(
+        service.renameMeeting("not-a-uuid", "X"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
+    });
+  });
+
+  describe("deleteMeeting", () => {
+    it("removes the Meeting with its Speakers and Action Items, leaving other Meetings alone", async () => {
+      const doomed = await readyMeeting();
+      now = START;
+      const kept = await readyMeeting();
+      expect(doomed.actionItems.length).toBeGreaterThan(0);
+
+      await service.deleteMeeting(doomed.id);
+
+      expect(await service.getMeeting(doomed.id)).toBeNull();
+      expect(await service.getMeetingStatus(doomed.id)).toBeNull();
+      expect(
+        await db
+          .select()
+          .from(speakers)
+          .where(eq(speakers.meetingId, doomed.id)),
+      ).toEqual([]);
+      expect(
+        await db
+          .select()
+          .from(actionItems)
+          .where(eq(actionItems.meetingId, doomed.id)),
+      ).toEqual([]);
+      expect(await service.getMeeting(kept.id)).toEqual(kept);
+      expect((await service.listMeetings({})).map(({ id }) => id)).toEqual([
+        kept.id,
+      ]);
+    });
+
+    it("stops a processing run that is still in flight for it", async () => {
+      // Deleting from inside the provider call stands in for a user pressing Delete mid-pipeline.
+      let deleted = false;
+      const deleting: SummarizationProvider = {
+        summarize: async (input) => {
+          await service.deleteMeeting(stopped.id);
+          deleted = true;
+          return createFakeSummarizationProvider().summarize(input);
+        },
+      };
+      const target = serviceWith({ summarizationProvider: deleting });
+      const created = await target.createMeeting({
+        title: "Doomed",
+        speakers: ["Amara", "Ben"],
+      });
+      const stopped = await target.stopRecording(created.id);
+
+      await expect(target.processMeeting(stopped.id)).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
+
+      expect(deleted).toBe(true);
+      expect(await service.getMeeting(stopped.id)).toBeNull();
+      expect(
+        await db
+          .select()
+          .from(actionItems)
+          .where(eq(actionItems.meetingId, stopped.id)),
+      ).toEqual([]);
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting, and for one already deleted", async () => {
+      const ready = await readyMeeting();
+      await service.deleteMeeting(ready.id);
+
+      await expect(service.deleteMeeting(ready.id)).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
+      await expect(service.deleteMeeting("not-a-uuid")).rejects.toBeInstanceOf(
+        MeetingNotFoundError,
+      );
+    });
+  });
+
+  describe("exportSummaryMarkdown", () => {
+    it("renders the Summary and Action Items as Markdown with a filename from the title", async () => {
+      const ready = await readyMeeting();
+      const [first] = ready.actionItems;
+      const done = await service.toggleActionItem(ready.id, first.id);
+
+      const exported = await service.exportSummaryMarkdown(ready.id);
+
+      expect(exported.filename).toBe("q3-roadmap-sync.md");
+      expect(exported.markdown).toBe(
+        summaryMarkdown({ ...done, summary: done.summary! }),
+      );
+      expect(exported.markdown).toContain("# Q3 roadmap sync\n");
+      expect(exported.markdown).toContain("## Overview\n\n");
+      expect(exported.markdown).toContain(`\n${ready.summary!.overview}\n`);
+      expect(exported.markdown).toContain("## Key Takeaways\n\n");
+      for (const takeaway of ready.summary!.keyTakeaways) {
+        expect(exported.markdown).toContain(`- ${takeaway}\n`);
+      }
+      expect(exported.markdown).toContain("## Action Items\n\n");
+      const owner = ready.speakers.find(
+        (speaker) => speaker.id === first.ownerSpeakerId,
+      )!;
+      expect(exported.markdown).toContain(`- [x] ${first.text} (${owner.name}`);
+      expect(exported.markdown.match(/^- \[ \] /gm)).toHaveLength(
+        ready.actionItems.length - 1,
+      );
+    });
+
+    it("throws SummaryNotReadyError while a regenerate is replacing the Summary", async () => {
+      const ready = await readyMeeting();
+      const regenerating = await service.regenerateSummary(ready.id);
+      expect(regenerating.summary).not.toBeNull();
+
+      await expect(
+        service.exportSummaryMarkdown(ready.id),
+      ).rejects.toMatchObject({
+        name: "SummaryNotReadyError",
+        status: "summarizing",
+      });
+    });
+
+    it("exports the Summary a failed regenerate left in place", async () => {
+      const ready = await readyMeeting();
+      const failing = serviceWith({
+        summarizationProvider: {
+          summarize: async () => {
+            throw new Error("Injected");
+          },
+        },
+      });
+      await failing.regenerateSummary(ready.id);
+      const failed = await failing.processMeeting(ready.id);
+      expect(failed.status).toBe("failed");
+
+      const exported = await service.exportSummaryMarkdown(ready.id);
+
+      expect(exported.markdown).toContain(ready.summary!.overview);
+    });
+
+    it("throws SummaryNotReadyError while the Meeting has no Summary", async () => {
+      const created = await service.createMeeting({
+        title: "Standup",
+        speakers: ["Amara", "Ben"],
+      });
+
+      await expect(
+        service.exportSummaryMarkdown(created.id),
+      ).rejects.toMatchObject({
+        name: "SummaryNotReadyError",
+        meetingId: created.id,
+        status: "recording",
+      });
+    });
+
+    it("throws MeetingNotFoundError for an unknown Meeting", async () => {
+      await expect(
+        service.exportSummaryMarkdown("00000000-0000-4000-8000-000000000000"),
+      ).rejects.toBeInstanceOf(MeetingNotFoundError);
     });
   });
 

@@ -2,7 +2,7 @@ import "server-only";
 
 import { after } from "next/server";
 
-import type { MeetingService } from "@/lib/meetings";
+import { MeetingNotFoundError, type MeetingService } from "@/lib/meetings";
 
 /**
  * Runs `processMeeting` after the current response has been sent (ADR-0002), so the action
@@ -13,8 +13,13 @@ export function scheduleProcessing(service: MeetingService, meetingId: string) {
     try {
       await service.processMeeting(meetingId);
     } catch (error) {
-      // processMeeting only throws on infrastructure failure; the Meeting stays in-flight
-      // until someone retries (ADR-0002 accepts this).
+      if (error instanceof MeetingNotFoundError) {
+        // Deleted while its provider call was running; there is nothing left to update.
+        console.warn(`Meeting ${meetingId} was deleted while processing`);
+        return;
+      }
+      // Otherwise processMeeting only throws on infrastructure failure; the Meeting stays
+      // in-flight until someone retries (ADR-0002 accepts this).
       console.error(`Processing Meeting ${meetingId} did not complete`, error);
     }
   });

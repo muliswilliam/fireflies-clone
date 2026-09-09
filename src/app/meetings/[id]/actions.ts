@@ -1,13 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import {
   ActionItemNotFoundError,
   getMeetingService,
   MeetingNotFailedError,
   MeetingNotFoundError,
+  MeetingValidationError,
 } from "@/lib/meetings";
 
 import { scheduleProcessing } from "../schedule-processing";
@@ -77,4 +78,41 @@ export async function retryMeetingAction(meetingId: string): Promise<void> {
     console.warn(error.message);
   }
   revalidatePath(`/meetings/${meetingId}`);
+}
+
+/** What the inline rename control learns back: saved, or why the title was refused. */
+export type RenameMeetingResult = { ok: true } | { ok: false; error: string };
+
+/** Renames the Meeting and re-renders its page and the list, or reports the broken title rule. */
+export async function renameMeetingAction(
+  meetingId: string,
+  title: string,
+): Promise<RenameMeetingResult> {
+  try {
+    await getMeetingService().renameMeeting(meetingId, title);
+  } catch (error) {
+    if (error instanceof MeetingNotFoundError) notFound();
+    if (error instanceof MeetingValidationError) {
+      return { ok: false, error: error.issues[0]?.message ?? error.message };
+    }
+    throw error;
+  }
+  revalidatePath(`/meetings/${meetingId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Deletes the Meeting (Speakers, Transcript, Summary and Action Items with it) and sends the
+ * user back to the list. A Meeting someone else already deleted ends up in the same place.
+ */
+export async function deleteMeetingAction(meetingId: string): Promise<void> {
+  try {
+    await getMeetingService().deleteMeeting(meetingId);
+  } catch (error) {
+    if (!(error instanceof MeetingNotFoundError)) throw error;
+    console.warn(error.message);
+  }
+  revalidatePath("/");
+  redirect("/");
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   createAnthropicStructuredGenerator,
   SERVER_SIDE_FALLBACK_BETA,
+  supportsServerSideFallbacks,
 } from "@/lib/ai/anthropic-structured-generator";
 import {
   ProviderError,
@@ -111,7 +112,10 @@ type Captured = {
 };
 
 /** A generator over a client whose fetch is `respond`; records what it sent. */
-function generatorWith(respond: () => Response | Promise<Response>) {
+function generatorWith(
+  respond: () => Response | Promise<Response>,
+  model = "claude-opus-5",
+) {
   const captured: Captured[] = [];
   const client = new Anthropic({
     apiKey: "sk-ant-test",
@@ -129,7 +133,7 @@ function generatorWith(respond: () => Response | Promise<Response>) {
     captured,
     generator: createAnthropicStructuredGenerator({
       client,
-      model: "claude-opus-5",
+      model,
     }),
   };
 }
@@ -179,6 +183,38 @@ describe("Anthropic structured generator", () => {
       additionalProperties: false,
       required: ["answer", "confidence"],
     });
+  });
+
+  it("leaves fallbacks out for a model that rejects the parameter", async () => {
+    const { generator, captured } = generatorWith(
+      () =>
+        sseResponse(
+          textStream(JSON.stringify({ answer: "Paris", confidence: 99 })),
+        ),
+      "claude-sonnet-5",
+    );
+    await generator.generate(REQUEST);
+
+    const [{ headers, body }] = captured;
+    expect(body.model).toBe("claude-sonnet-5");
+    expect(body).not.toHaveProperty("fallbacks");
+    expect(headers.get("anthropic-beta") ?? "").not.toContain(
+      SERVER_SIDE_FALLBACK_BETA,
+    );
+  });
+
+  it.each([
+    ["claude-opus-5", true],
+    ["claude-opus-5-20260401", true],
+    ["claude-fable-5-1", true],
+    ["claude-fable-5", true],
+    ["claude-mythos-5-1", true],
+    ["claude-sonnet-5", false],
+    ["claude-opus-4-8", false],
+    ["claude-haiku-4-5", false],
+    ["claude-opus-50", false],
+  ])("supportsServerSideFallbacks(%s) is %s", (model, expected) => {
+    expect(supportsServerSideFallbacks(model)).toBe(expected);
   });
 
   it("passes the requested effort through", async () => {

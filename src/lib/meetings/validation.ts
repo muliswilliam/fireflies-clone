@@ -1,5 +1,8 @@
 import { MeetingValidationError, type MeetingValidationIssue } from "./errors";
 
+/** Shown wherever a blank title is refused, on the server and inline in the client. */
+export const MEETING_TITLE_REQUIRED_MESSAGE = "Give the Meeting a title";
+
 export const MIN_SPEAKERS = 2;
 export const MAX_SPEAKERS = 6;
 
@@ -69,6 +72,13 @@ function isOfferedDuration(
   return options.includes(minutes);
 }
 
+/** The title rule on its own, for renaming: trimmed and non-empty. Same error contract. */
+export function validateMeetingTitle(title: string): string {
+  const { title: normalized, issue } = checkTitleRule(title);
+  if (issue) throw new MeetingValidationError([issue]);
+  return normalized;
+}
+
 /** Checks the rules shared by every kind of Meeting and reports every broken one. */
 function checkMeetingRules(input: MeetingInput): {
   normalized: ValidatedMeetingInput;
@@ -76,10 +86,8 @@ function checkMeetingRules(input: MeetingInput): {
 } {
   const issues: MeetingValidationIssue[] = [];
 
-  const title = input.title.trim();
-  if (title.length === 0) {
-    issues.push({ path: "title", message: "Give the Meeting a title" });
-  }
+  const { title, issue: titleIssue } = checkTitleRule(input.title);
+  if (titleIssue) issues.push(titleIssue);
 
   const speakers = input.speakers.map((name) => name.trim());
   if (speakers.length < MIN_SPEAKERS || speakers.length > MAX_SPEAKERS) {
@@ -112,5 +120,19 @@ function checkMeetingRules(input: MeetingInput): {
   return {
     normalized: { title, speakers, agenda: agenda.length > 0 ? agenda : null },
     issues,
+  };
+}
+
+function checkTitleRule(raw: string): {
+  title: string;
+  issue: MeetingValidationIssue | null;
+} {
+  const title = raw.trim();
+  return {
+    title,
+    issue:
+      title.length === 0
+        ? { path: "title", message: MEETING_TITLE_REQUIRED_MESSAGE }
+        : null,
   };
 }
