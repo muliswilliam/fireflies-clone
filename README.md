@@ -22,7 +22,7 @@ Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`
 
 - From the detail page a Meeting can be renamed inline (the title rule applies: non-empty), deleted after a confirmation (its Speakers, Transcript, Summary and Action Items go with it, and the list is shown), and exported once the Summary is ready: the Export menu copies the Summary as Markdown to the clipboard (with a toast) or downloads it as a `.md` file named after the title. The document has the title, a meta line, then Overview, Key Takeaways and Action Items as a task list with owner, due date and done state.
 
-Sample Meetings arrive in the following ticket.
+- Three Sample Meetings are seeded so the list is never empty: checked-in JSON fixtures (`src/lib/sample-meetings/fixtures/`, written once with Claude and hand-checked) with Speakers, Transcript, Summary and Action Items, each marked with a Sample badge on the list and the detail page. The seeder upserts by fixture id, so it runs on every container start after migrations (and as `pnpm db:seed`) without duplicating anything; a deleted Sample Meeting comes back on the next run, and one that was renamed or ticked is reset to its fixture. Sample Meetings are otherwise ordinary (renamable, deletable, exportable) and do not count toward the daily cap.
 
 ## Stack
 
@@ -37,6 +37,7 @@ pnpm install
 cp .env.example .env        # then set ANTHROPIC_API_KEY, or AI_PROVIDER=fake
 docker compose up -d        # Postgres on localhost:5433
 pnpm db:migrate
+pnpm db:seed                # Sample Meetings
 pnpm dev                    # http://localhost:3000
 ```
 
@@ -50,6 +51,7 @@ The compose Postgres is published on host port 5433 so it never collides with a 
 | `pnpm build`      | Production build (Next standalone output)           |
 | `pnpm start`      | Serve the production build                          |
 | `pnpm db:migrate` | Apply Drizzle SQL migrations from `drizzle/`        |
+| `pnpm db:seed`    | Seed the Sample Meetings (idempotent)               |
 | `pnpm db:generate` | Generate a migration from `src/lib/db/schema.ts`   |
 
 Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the database answers, `503` otherwise.
@@ -82,7 +84,7 @@ docker run --rm -p 3000:3000 -e PORT=3000 \
   firefly-notes
 ```
 
-The multi-stage image runs migrations on start, then the Next standalone server. `PORT` is respected.
+The multi-stage image runs migrations on start, then seeds the Sample Meetings, then the Next standalone server. `PORT` is respected.
 
 ## Deploy
 

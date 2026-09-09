@@ -14,9 +14,9 @@ FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm build && pnpm build:migrate
+RUN pnpm build && pnpm build:migrate && pnpm build:seed
 
-# Minimal runtime: standalone server, static assets, migrations, entrypoint.
+# Minimal runtime: standalone server, static assets, migrations, seeder, entrypoint.
 FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -31,6 +31,7 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/dist/migrate.cjs ./migrate.cjs
+COPY --from=build --chown=nextjs:nodejs /app/dist/seed.cjs ./seed.cjs
 COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
 

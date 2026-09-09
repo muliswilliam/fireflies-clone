@@ -8,6 +8,7 @@ import {
   FailedPanel,
   ProcessingPanel,
 } from "@/components/meetings/panel-states";
+import { SampleBadge } from "@/components/meetings/sample-badge";
 import { SpeakerNumber } from "@/components/meetings/speaker-number";
 import { StatusBadge } from "@/components/meetings/status-badge";
 import { StatusPoller } from "@/components/meetings/status-poller";
@@ -68,6 +69,7 @@ export default async function MeetingPage({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {meeting.isSample && <SampleBadge />}
           <StatusBadge status={meeting.status} className="mr-2" />
           <ExportSummaryMenu summaryExport={summaryExport} />
           <DeleteMeetingButton meetingId={meeting.id} title={meeting.title} />

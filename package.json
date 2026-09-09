@@ -19,7 +19,9 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
-    "build:migrate": "esbuild scripts/migrate.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/migrate.cjs"
+    "db:seed": "node --env-file-if-exists=.env --import tsx scripts/seed.ts",
+    "build:migrate": "esbuild scripts/migrate.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/migrate.cjs",
+    "build:seed": "esbuild scripts/seed.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/seed.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

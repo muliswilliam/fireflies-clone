@@ -1,0 +1,304 @@
+{
+  "id": "467da0f3-954a-465d-adf9-d96025e9ac97",
+  "title": "Postmortem: checkout outage on 28 August",
+  "agenda": "Timeline of the incident\nRoot cause\nWhat went well, what did not\nRemediation items and owners",
+  "recordingStartedAt": "2026-09-04T16:00:00.000Z",
+  "recordingEndedAt": "2026-09-04T16:31:00.000Z",
+  "speakers": [
+    {
+      "id": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+      "name": "Sam Okoro"
+    },
+    {
+      "id": "5731871b-b653-498f-8f81-04d8cf5dace2",
+      "name": "Ingrid Baumann"
+    },
+    {
+      "id": "d0234088-ad56-4834-9203-290ea540a53c",
+      "name": "Ravi Menon"
+    },
+    {
+      "id": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+      "name": "Chloe Dubois"
+    },
+    {
+      "id": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+      "name": "Noah Fischer"
+    }
+  ],
+  "transcript": {
+    "utterances": [
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 3000,
+        "endMs": 70842,
+        "text": "Thanks for joining. This is the blameless postmortem for the checkout outage on the twenty-eighth. The goal is to understand what happened and agree on remediation with owners. Ingrid, you were on call, can you walk us through the timeline?"
+      },
+      {
+        "speakerId": "5731871b-b653-498f-8f81-04d8cf5dace2",
+        "startMs": 74498,
+        "endMs": 140716,
+        "text": "Yes. At 14:12 UTC the payment success rate alarm fired: it had dropped from ninety-eight percent to about sixty. I acknowledged at 14:15 and started looking at the payment service logs, which showed timeouts calling the tax calculation service."
+      },
+      {
+        "speakerId": "5731871b-b653-498f-8f81-04d8cf5dace2",
+        "startMs": 148918,
+        "endMs": 213511,
+        "text": "Tax service itself looked healthy on its dashboard, CPU and memory were normal, but its p99 latency had gone from two hundred milliseconds to over eight seconds. At 14:31 I paged Ravi since he knows that service best."
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 219353,
+        "endMs": 326195,
+        "text": "When I got on, the first thing I checked was the deploy history. There had been a tax service deploy at 13:50 that changed how we cache tax rates: we moved from an in-process cache to Redis so all instances share the same rates. The change itself was fine, but the Redis client was configured with no connection pool limit and a five-second timeout."
+      },
+      {
+        "speakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+        "startMs": 336583,
+        "endMs": 352426,
+        "text": "So every request was opening a new connection?"
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 360453,
+        "endMs": 460795,
+        "text": "Not exactly. It reused connections under normal load, but the first cache miss after deploy caused a stampede: every instance requested every rate at the same time, Redis got saturated, and the five-second timeout meant requests queued instead of failing fast. The payment service has a three-second timeout on tax, so from its point of view tax was just down."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 466462,
+        "endMs": 479056,
+        "text": "How long until it was resolved?"
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 489269,
+        "endMs": 534362,
+        "text": "I rolled the tax deploy back at 14:48. Success rate recovered within four minutes. So total customer impact was about forty minutes, from 14:10 to 14:52."
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 542215,
+        "endMs": 601932,
+        "text": "From the business side, that's roughly eleven hundred failed checkouts. Most customers retried later, but we estimate around two hundred orders were lost outright. Support got sixty-three tickets and we've responded to all of them."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 607424,
+        "endMs": 655767,
+        "text": "Thanks Chloe. Let's talk about root cause. Ravi, is it fair to say the cause was the cache stampede, or is it the lack of a pool limit?"
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 665805,
+        "endMs": 746648,
+        "text": "I'd say there were three things. The stampede on cold cache, the unbounded connection pool that let it saturate Redis, and the mismatch between our five-second Redis timeout and payment's three-second call timeout. Any one of those alone would have been a blip. Together they were an outage."
+      },
+      {
+        "speakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+        "startMs": 754326,
+        "endMs": 815669,
+        "text": "I'd add a fourth: the deploy went out at ten to two on a Thursday with no canary. If it had gone to one instance first, we'd have seen the latency spike without taking down checkout."
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 820987,
+        "endMs": 849830,
+        "text": "That's fair. The tax service isn't on the canary pipeline because it was considered low risk."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 859694,
+        "endMs": 869037,
+        "text": "Okay. What went well?"
+      },
+      {
+        "speakerId": "5731871b-b653-498f-8f81-04d8cf5dace2",
+        "startMs": 876540,
+        "endMs": 907008,
+        "text": "Alarming was fast. We knew within two minutes. And the rollback was clean, no data issues afterwards."
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 912151,
+        "endMs": 952369,
+        "text": "Customer comms went out at 14:40 on the status page, which is within our thirty-minute target. Support had a macro ready by 15:00."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 962058,
+        "endMs": 971401,
+        "text": "What didn't go well?"
+      },
+      {
+        "speakerId": "5731871b-b653-498f-8f81-04d8cf5dace2",
+        "startMs": 978730,
+        "endMs": 1056322,
+        "text": "It took me nineteen minutes to page Ravi. I spent that time looking at the tax dashboard, which said everything was healthy because it only shows resource metrics, not latency or error rate. If latency had been on the front page I'd have escalated in five."
+      },
+      {
+        "speakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+        "startMs": 1061290,
+        "endMs": 1096633,
+        "text": "And nobody looked at the deploy history first. That should be step one in the runbook for any service degradation."
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 1106147,
+        "endMs": 1164240,
+        "text": "Also, the payment service has no fallback when tax is unavailable. We could have used the last known rate for the customer's region and flagged the order for review rather than failing the checkout."
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 1171394,
+        "endMs": 1231112,
+        "text": "From my side, the status page said 'investigating elevated errors' for the whole incident. We never updated it to say checkout specifically was affected, and several customers said they didn't realise the two were connected."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1235906,
+        "endMs": 1266374,
+        "text": "Good. Let's turn these into actions. I'll go one at a time. First, the Redis client configuration."
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 1275714,
+        "endMs": 1325681,
+        "text": "I'll set a pool maximum, drop the timeout to one second, and add jitter to the cache warm-up so instances don't stampede. I can have that in review tomorrow."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1332660,
+        "endMs": 1343629,
+        "text": "Second, the tax service dashboard."
+      },
+      {
+        "speakerId": "5731871b-b653-498f-8f81-04d8cf5dace2",
+        "startMs": 1348248,
+        "endMs": 1404716,
+        "text": "I'll add p99 latency and error rate to the top of every service dashboard, not just tax. We have a template so it's mostly a matter of applying it. End of next week."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1413881,
+        "endMs": 1423224,
+        "text": "Third, the canary pipeline."
+      },
+      {
+        "speakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+        "startMs": 1430029,
+        "endMs": 1483246,
+        "text": "I'll move tax onto the canary pipeline and audit which other services are exempt. My guess is there are four or five. I'll bring the list to next week's platform meeting."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1487690,
+        "endMs": 1497034,
+        "text": "Fourth, the payment fallback."
+      },
+      {
+        "speakerId": "d0234088-ad56-4834-9203-290ea540a53c",
+        "startMs": 1506024,
+        "endMs": 1578742,
+        "text": "That's a bigger piece of work. Using a stale rate has tax compliance implications so it needs a conversation with Finance before we design it. I'll set that up, but I don't want to commit to a date for the fix itself yet."
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 1585372,
+        "endMs": 1614215,
+        "text": "I'll join that conversation. Finance will want to know how orders flagged for review get reconciled."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1618485,
+        "endMs": 1648953,
+        "text": "Okay, action is to have the conversation and come back with a proposal. Fifth, runbook and comms."
+      },
+      {
+        "speakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7",
+        "startMs": 1657768,
+        "endMs": 1681737,
+        "text": "I'll add 'check recent deploys' as the first step in the degradation runbook."
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 1688192,
+        "endMs": 1725160,
+        "text": "And I'll add an incident comms checklist that includes naming the affected customer-facing feature within the first update. Both this week."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1729255,
+        "endMs": 1754848,
+        "text": "Last one: do we need to do anything for the two hundred lost orders?"
+      },
+      {
+        "speakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93",
+        "startMs": 1763489,
+        "endMs": 1806957,
+        "text": "We've already emailed affected customers with a ten percent code. I don't think there's more to do unless Finance wants to account for it differently."
+      },
+      {
+        "speakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7",
+        "startMs": 1813238,
+        "endMs": 1855080,
+        "text": "Then we're done. I'll write this up and circulate the doc by tomorrow morning. Thanks everyone, this was a good one to learn from."
+      }
+    ]
+  },
+  "summary": {
+    "overview": "The team held a blameless postmortem for the 40-minute checkout outage on 28 August, in which payment success rates fell from 98% to about 60% and roughly 200 orders were lost. A tax service deploy that moved rate caching to Redis triggered a cold-cache stampede, an unbounded connection pool let it saturate Redis, and a five-second Redis timeout longer than payment's three-second call timeout turned slow responses into hard failures. Detection and rollback worked well; escalation was slow because the service dashboard showed only resource metrics, nobody checked deploy history first, and the status page never named checkout as the affected feature. Remediation covers the Redis client configuration, dashboards, canary deploys, runbooks, incident comms, and a longer-term conversation about a payment fallback when tax is unavailable.",
+    "keyTakeaways": [
+      "Customer impact lasted about 40 minutes (14:10 to 14:52 UTC): around 1,100 failed checkouts, roughly 200 lost orders and 63 support tickets.",
+      "Root cause was a combination of a cold-cache stampede after a Redis caching deploy, an unbounded Redis connection pool, and a Redis timeout longer than the caller's timeout.",
+      "The tax service was not on the canary pipeline because it was considered low risk; a one-instance canary would have caught the latency spike.",
+      "Escalation took 19 minutes because the service dashboard showed healthy CPU and memory but no latency or error rate.",
+      "The status page said 'investigating elevated errors' throughout and never named checkout, so customers did not connect the two.",
+      "Payment has no fallback when tax is unavailable; using a last-known rate needs a compliance conversation with Finance before it is designed."
+    ]
+  },
+  "actionItems": [
+    {
+      "id": "1396dec0-e177-4a16-9df3-ab350abfd094",
+      "text": "Set a Redis pool maximum, reduce the timeout to one second, and add jitter to the tax cache warm-up",
+      "dueDate": "Tomorrow",
+      "ownerSpeakerId": "d0234088-ad56-4834-9203-290ea540a53c"
+    },
+    {
+      "id": "92853d3a-6594-4537-b85d-6f9f2cce541a",
+      "text": "Add p99 latency and error rate to the top of every service dashboard using the shared template",
+      "dueDate": "End of next week",
+      "ownerSpeakerId": "5731871b-b653-498f-8f81-04d8cf5dace2"
+    },
+    {
+      "id": "749f312c-cf79-4a1b-923c-b9d31bd72a42",
+      "text": "Move the tax service onto the canary pipeline and audit which other services are exempt",
+      "dueDate": "Next platform meeting",
+      "ownerSpeakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7"
+    },
+    {
+      "id": "41a96b3c-219c-4e47-98c4-29e1c9310092",
+      "text": "Set up the Finance conversation about a last-known-rate fallback for payment and return with a proposal",
+      "dueDate": null,
+      "ownerSpeakerId": "d0234088-ad56-4834-9203-290ea540a53c"
+    },
+    {
+      "id": "042a6bb1-bd1d-48c5-8ab4-98349ae35a20",
+      "text": "Add 'check recent deploys' as the first step of the service degradation runbook",
+      "dueDate": "This week",
+      "ownerSpeakerId": "fff4fa16-e9b4-46c6-85f6-fbbfd6351db7"
+    },
+    {
+      "id": "afd11e12-0522-44c4-8661-69aee6543a53",
+      "text": "Add an incident comms checklist that names the affected customer-facing feature in the first update",
+      "dueDate": "This week",
+      "ownerSpeakerId": "4f39e6a5-6f0a-4618-9e09-5f1518167d93"
+    },
+    {
+      "id": "480c7398-17f6-4392-ad5d-0e352827ad80",
+      "text": "Write up and circulate the postmortem document",
+      "dueDate": "Tomorrow morning",
+      "ownerSpeakerId": "4bd208fc-27e1-44a7-92de-c5ef6a5bdcb7"
+    }
+  ]
+}
