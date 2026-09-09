@@ -69,7 +69,8 @@ function MeetingRow({ meeting }: { meeting: MeetingListItem }) {
         className="hover:bg-muted/50 focus-visible:ring-ring/50 flex items-center justify-between gap-4 px-5 py-4 outline-none first:rounded-t-xl last:rounded-b-xl focus-visible:ring-3"
       >
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          {/* Wraps so a long title keeps its width on a phone and the Sample badge drops below it. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <p className="min-w-0 truncate font-medium">{meeting.title}</p>
             {meeting.isSample && <SampleBadge />}
           </div>
