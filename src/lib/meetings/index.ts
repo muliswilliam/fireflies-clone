@@ -12,8 +12,10 @@ export {
   MeetingNotFailedError,
   MeetingNotFoundError,
   MeetingValidationError,
+  SummaryNotReadyError,
   type MeetingValidationIssue,
 } from "./errors";
+export type { SummaryExport } from "./markdown";
 export type {
   ActionItem,
   CreateInstantMeetingInput,

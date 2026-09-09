@@ -20,7 +20,9 @@ Vocabulary follows [`CONTEXT.md`](CONTEXT.md). Architecture decisions live in [`
 - If a provider throws, answers with something the Transcript or Summary rules reject, or does not answer within 4 minutes, the Meeting is `failed` at that step with the reason shown on its page. Retry resumes at the failed step: a Meeting that already has a Transcript only summarizes again. Processing is not a durable queue: if the server restarts mid-pipeline the Meeting stays Transcribing or Summarizing, and Retry is only offered once it is `failed`. See ADR-0002.
 - An Instant Meeting skips the live Recording: pick 5, 15, 30 (default) or 60 minutes on the form and the Meeting is created with its Recording already ended, dated as if it had just run for that long. It starts at Transcribing with processing scheduled at once, so you land on the detail page watching the stepper. Same validation and daily cap as any other Meeting; the Transcript length follows the chosen duration through the same 8-80 clamp.
 
-Markdown export and Sample Meetings arrive in the following tickets.
+- From the detail page a Meeting can be renamed inline (the title rule applies: non-empty), deleted after a confirmation (its Speakers, Transcript, Summary and Action Items go with it, and the list is shown), and exported once the Summary is ready: the Export menu copies the Summary as Markdown to the clipboard (with a toast) or downloads it as a `.md` file named after the title. The document has the title, a meta line, then Overview, Key Takeaways and Action Items as a task list with owner, due date and done state.
+
+Sample Meetings arrive in the following ticket.
 
 ## Stack
 

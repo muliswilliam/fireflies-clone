@@ -30,7 +30,13 @@ import {
   DailyCapReachedError,
   MeetingNotFailedError,
   MeetingNotFoundError,
+  SummaryNotReadyError,
 } from "./errors";
+import {
+  summaryMarkdown,
+  summaryMarkdownFilename,
+  type SummaryExport,
+} from "./markdown";
 import { describeFirstIssue, type ProviderDocument } from "./provider-output";
 import {
   summarizationOutputSchemaFor,
@@ -48,6 +54,7 @@ import { formatDuration } from "@/lib/format";
 import {
   validateInstantMeetingInput,
   validateMeetingInput,
+  validateMeetingTitle,
   type ValidatedMeetingInput,
 } from "./validation";
 import type { z } from "zod";
@@ -503,6 +510,44 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     return afterGuardedUpdate(db, id, updated);
   }
 
+  /** Changes the title. The same title rule as creation applies; everything else is untouched. */
+  async function renameMeeting(id: string, title: string): Promise<Meeting> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+    const normalized = validateMeetingTitle(title);
+
+    const [updated] = await db
+      .update(meetings)
+      .set({ title: normalized, updatedAt: now() })
+      .where(eq(meetings.id, id))
+      .returning();
+    return afterGuardedUpdate(db, id, updated);
+  }
+
+  /**
+   * Removes the Meeting for good. Its Speakers and Action Items go with it through the
+   * cascading foreign keys; the Transcript and Summary live on the row itself (ADR-0004).
+   * A processing run still in flight for this Meeting finds nothing to update and stops.
+   */
+  async function deleteMeeting(id: string): Promise<void> {
+    if (!UUID_PATTERN.test(id)) throw new MeetingNotFoundError(id);
+
+    const deleted = await db
+      .delete(meetings)
+      .where(eq(meetings.id, id))
+      .returning({ id: meetings.id });
+    if (deleted.length === 0) throw new MeetingNotFoundError(id);
+  }
+
+  /** The Summary and Action Items as a Markdown document, once there is a Summary to export. */
+  async function exportSummaryMarkdown(id: string): Promise<SummaryExport> {
+    const meeting = await requireMeeting(db, id);
+    if (!meeting.summary) throw new SummaryNotReadyError(id, meeting.status);
+    return {
+      filename: summaryMarkdownFilename(meeting.title),
+      markdown: summaryMarkdown({ ...meeting, summary: meeting.summary }),
+    };
+  }
+
   /** Returns the Meeting with its Speakers and Action Items, or `null` when `id` is unknown or not a uuid. */
   async function getMeeting(id: string): Promise<Meeting | null> {
     return findMeeting(db, id);
@@ -625,6 +670,9 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
     toggleActionItem,
     regenerateSummary,
     retryMeeting,
+    renameMeeting,
+    deleteMeeting,
+    exportSummaryMarkdown,
     getMeeting,
     getMeetingStatus,
     listMeetings,

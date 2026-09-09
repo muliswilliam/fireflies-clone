@@ -68,3 +68,16 @@ export class MeetingNotFailedError extends Error {
     this.status = status;
   }
 }
+
+/** Export was asked of a Meeting that has no Summary yet; there is nothing to export until it is ready. */
+export class SummaryNotReadyError extends Error {
+  readonly meetingId: string;
+  readonly status: MeetingStatus;
+
+  constructor(meetingId: string, status: MeetingStatus) {
+    super(`Meeting ${meetingId} is ${status} and has no Summary to export yet`);
+    this.name = "SummaryNotReadyError";
+    this.meetingId = meetingId;
+    this.status = status;
+  }
+}

@@ -19,7 +19,10 @@ import type { FailedStep } from "@/lib/db/schema";
 import { getMeetingService, type Meeting } from "@/lib/meetings";
 
 import { ActionItemsList } from "./action-items-list";
+import { DeleteMeetingButton } from "./delete-meeting-button";
+import { ExportSummaryMenu } from "./export-summary-menu";
 import { FailedBanner } from "./failed-banner";
+import { MeetingTitle } from "./meeting-title";
 import { RecordingPanel } from "./recording-panel";
 import { RegenerateSummaryButton } from "./regenerate-summary-button";
 
@@ -42,6 +45,10 @@ export default async function MeetingPage({
   const { id } = await params;
   const meeting = await loadMeeting(id);
   if (!meeting) notFound();
+  // Export is offered as soon as there is a settled Summary, and stays off until then.
+  const exported = hasSettledSummary(meeting)
+    ? await getMeetingService().exportSummaryMarkdown(meeting.id)
+    : null;
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-10 sm:px-8">
@@ -49,17 +56,19 @@ export default async function MeetingPage({
       <BackToMeetingsLink />
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {meeting.title}
-          </h1>
+        <div className="min-w-0 flex-1 basis-72">
+          <MeetingTitle meetingId={meeting.id} title={meeting.title} />
           <MeetingMeta
             meeting={meeting}
             speakerCount={meeting.speakers.length}
             className="text-muted-foreground mt-1 text-sm"
           />
         </div>
-        <StatusBadge status={meeting.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={meeting.status} className="mr-2" />
+          <ExportSummaryMenu exported={exported} />
+          <DeleteMeetingButton meetingId={meeting.id} title={meeting.title} />
+        </div>
       </header>
 
       <section aria-label="Progress" className="mt-8 rounded-xl border p-5">
