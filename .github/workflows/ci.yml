@@ -58,6 +58,8 @@ jobs:
 
       - run: pnpm db:migrate
 
+      - run: pnpm db:seed
+
       - run: pnpm build
 
       - run: pnpm exec playwright install --with-deps chromium

@@ -4,6 +4,8 @@ import { Pool } from "pg";
 import * as schema from "./schema";
 
 export type Db = NodePgDatabase<typeof schema> & { $client: Pool };
+/** The handle a `db.transaction` callback receives. */
+export type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * Creates a typed Drizzle handle over a node-postgres pool.

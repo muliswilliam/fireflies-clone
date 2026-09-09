@@ -1,0 +1,318 @@
+{
+  "id": "bd7684ff-89e6-49c2-a8fe-b156b381ba6b",
+  "title": "Q4 launch readiness review",
+  "agenda": "Status of the remaining launch blockers\nPricing page and billing cut-over\nSupport and documentation readiness\nGo / no-go for 14 October",
+  "recordingStartedAt": "2026-09-01T09:00:00.000Z",
+  "recordingEndedAt": "2026-09-01T09:07:30.000Z",
+  "speakers": [
+    {
+      "id": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+      "name": "Priya Natarajan"
+    },
+    {
+      "id": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+      "name": "Marcus Webb"
+    },
+    {
+      "id": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+      "name": "Elena Sousa"
+    },
+    {
+      "id": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+      "name": "Tom Adeyemi"
+    }
+  ],
+  "transcript": {
+    "utterances": [
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 2500,
+        "endMs": 16800,
+        "text": "Morning everyone. This is the readiness review for the Q4 launch, so I want to leave with a clear go or no-go for the fourteenth. Let's start with the blockers list. Marcus, where are we?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 17500,
+        "endMs": 31800,
+        "text": "We had seven blockers on Friday and we're down to three. The export throttling fix shipped yesterday, the SSO redirect loop is closed, and the two accessibility issues on the settings page are in review."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 34019,
+        "endMs": 37119,
+        "text": "What are the three that are left?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 39257,
+        "endMs": 52357,
+        "text": "The billing cut-over, which Elena owns, the webhook retry storm we saw in staging on Thursday, and the migration for the legacy workspaces. The migration is the one I'm least comfortable with."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 54414,
+        "endMs": 61914,
+        "text": "Can you say more about the migration? Last I heard it was a dry run away from done."
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 63890,
+        "endMs": 83790,
+        "text": "The dry run against the production snapshot took eleven hours. That's fine for a weekend window, but two of the workspaces have custom roles that don't map cleanly to the new permission model. We either hand-map them or write a fallback that grants the closest role and flags it."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 85685,
+        "endMs": 88785,
+        "text": "How many workspaces are we talking about?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 90599,
+        "endMs": 98499,
+        "text": "Two, out of roughly four hundred legacy ones. Both are enterprise accounts though, so I'd rather not surprise them."
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 100232,
+        "endMs": 113332,
+        "text": "I'd go with the fallback plus a flag, and have the account managers walk both customers through it before the window. Hand-mapping means someone is doing it at two in the morning."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 114984,
+        "endMs": 123684,
+        "text": "Agreed. Marcus, can you have the fallback ready by end of week so we can dry run again over the weekend?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 125255,
+        "endMs": 132355,
+        "text": "Yes. I'll pair with Dana on it. The dry run itself I can kick off Saturday morning."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 133845,
+        "endMs": 137745,
+        "text": "Good. That leaves the webhook retry storm. What happened?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 139154,
+        "endMs": 157054,
+        "text": "A customer endpoint started returning 503s and our retry policy backed off but never gave up, so within an hour we had about forty thousand queued deliveries for a single endpoint. It didn't affect other customers, but the queue depth alarm fired all night."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 158382,
+        "endMs": 162282,
+        "text": "Do we have a cap on retries per endpoint?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 163529,
+        "endMs": 183029,
+        "text": "We have exponential backoff up to an hour but no maximum attempt count. The fix is a cap of twenty-four attempts and a circuit breaker that pauses an endpoint after ten consecutive failures. It's a small change; I just want a proper load test before it goes in."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 184195,
+        "endMs": 186895,
+        "text": "How long for the load test?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 187980,
+        "endMs": 192280,
+        "text": "Two days including writing the scenario. So merged by Thursday."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 193284,
+        "endMs": 195184,
+        "text": "Okay. Elena, billing cut-over."
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 196107,
+        "endMs": 218807,
+        "text": "The new pricing page is done and behind a feature flag. Billing is the harder part: we're moving from per-seat to usage tiers, and existing customers keep their current plan until their renewal date. That grandfathering logic is written and tested, but Finance still hasn't signed off on the proration rules for customers who upgrade mid-cycle."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 219649,
+        "endMs": 221149,
+        "text": "What's blocking Finance?"
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 221910,
+        "endMs": 238610,
+        "text": "They want the proration to round in the customer's favour and to show the exact credit before the customer confirms. The rounding is trivial. Showing the credit up front means a new preview endpoint, which is about three days of work."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 240890,
+        "endMs": 249190,
+        "text": "Is there a version of this where we launch without mid-cycle upgrades and add them a couple of weeks later?"
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 251389,
+        "endMs": 263689,
+        "text": "We could. Customers on a grandfathered plan would just see a 'contact us to change plan' link until the preview endpoint ships. It's not elegant, but it removes the dependency."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 265807,
+        "endMs": 274907,
+        "text": "I'd rather do that than slip the date. Elena, can you confirm with Finance that the interim flow is acceptable to them?"
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 276944,
+        "endMs": 281244,
+        "text": "Yes, I'll catch Rob this afternoon and write it up."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 283200,
+        "endMs": 293500,
+        "text": "One thing on the pricing page: the annual toggle still shows monthly prices in the comparison table when you switch. I filed it last night."
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 295375,
+        "endMs": 302075,
+        "text": "I saw it. It's a state bug in the table component, I'll have it fixed today."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 303869,
+        "endMs": 306169,
+        "text": "Thanks. Tom, support and docs."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 307882,
+        "endMs": 328582,
+        "text": "Docs are in good shape. The migration guide and the new permissions reference are published in the staging docs site, and the pricing FAQ is drafted and waiting on the final proration wording from Elena. Support has had two training sessions and there's a macro set for the most likely questions."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 330214,
+        "endMs": 332514,
+        "text": "What about the in-app announcement?"
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 334065,
+        "endMs": 344765,
+        "text": "Copy is approved. Design wants one more pass on the banner because it overlaps the new sidebar on narrow screens. I'll have that sorted by Wednesday."
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 346235,
+        "endMs": 350935,
+        "text": "Should the announcement go out before the migration window or after?"
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 352324,
+        "endMs": 364224,
+        "text": "After. We don't want people logging in during the window to check what changed. The plan is banner at eight in the morning on the fourteenth, email at nine."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 365532,
+        "endMs": 392232,
+        "text": "Let me summarise where I think we are. Migration: fallback for custom roles by Friday, second dry run this weekend. Webhooks: retry cap and circuit breaker merged by Thursday after a load test. Billing: launch with grandfathered plans and a contact-us path for mid-cycle upgrades, preview endpoint two weeks later. Docs and support are ready. Does anyone see a reason we can't go on the fourteenth?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 393459,
+        "endMs": 399359,
+        "text": "Only if the second dry run surfaces something new. I'll know by Sunday night."
+      },
+      {
+        "speakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f",
+        "startMs": 400505,
+        "endMs": 406805,
+        "text": "I'm comfortable, assuming Finance is fine with the interim flow. I'll have that answer today."
+      },
+      {
+        "speakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d",
+        "startMs": 407870,
+        "endMs": 409770,
+        "text": "No concerns from me."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 410754,
+        "endMs": 427454,
+        "text": "Then it's a conditional go. I'll send the note to leadership now and we'll confirm on Monday's standup once Marcus has the dry run results. Let's also lock a rollback plan in writing before then. Marcus, can you own that document?"
+      },
+      {
+        "speakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949",
+        "startMs": 428357,
+        "endMs": 433057,
+        "text": "Yes, I'll have a draft by Thursday alongside the load test."
+      },
+      {
+        "speakerId": "35deee63-f855-4cf7-a717-616fc41f8cc2",
+        "startMs": 433879,
+        "endMs": 437779,
+        "text": "Great. Thanks all, that was faster than I feared."
+      }
+    ]
+  },
+  "summary": {
+    "overview": "The team reviewed readiness for the Q4 launch on 14 October and reached a conditional go. Seven launch blockers are down to three: the legacy workspace migration, a webhook retry storm seen in staging, and the billing cut-over to usage tiers. The migration will handle two enterprise workspaces with custom roles through a fallback-and-flag approach followed by a second weekend dry run; webhooks get a retry cap and circuit breaker after a load test; and billing launches with grandfathered plans and an interim contact-us path for mid-cycle upgrades so the launch date does not slip. Documentation and support are ready, with the in-app announcement going out after the migration window.",
+    "keyTakeaways": [
+      "Conditional go for 14 October, to be confirmed at Monday's standup once the second migration dry run has results.",
+      "Two enterprise workspaces with custom roles will be migrated with a fallback role and a flag, and their account managers will brief them before the window.",
+      "Webhook deliveries get a cap of 24 attempts and a circuit breaker after 10 consecutive failures, merged after a two-day load test.",
+      "Billing launches with grandfathered plans; mid-cycle upgrades use a contact-us link until the proration preview endpoint ships about two weeks later.",
+      "The in-app announcement banner goes live at 08:00 on launch day, after the migration window, with the email an hour later.",
+      "A written rollback plan is required before the final go decision."
+    ]
+  },
+  "actionItems": [
+    {
+      "id": "8e509efe-8222-4225-b3ab-9117079b7559",
+      "text": "Implement the fallback-and-flag mapping for custom roles and start the second migration dry run on Saturday",
+      "dueDate": "Friday",
+      "ownerSpeakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949"
+    },
+    {
+      "id": "67e8ad67-e8d5-45de-8821-a4532e03a1e9",
+      "text": "Load test and merge the webhook retry cap and circuit breaker",
+      "dueDate": "Thursday",
+      "ownerSpeakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949"
+    },
+    {
+      "id": "5bca926f-1350-4633-8f43-8a8679c7606c",
+      "text": "Confirm with Finance that the interim contact-us flow for mid-cycle upgrades is acceptable and write it up",
+      "dueDate": "Today",
+      "ownerSpeakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f"
+    },
+    {
+      "id": "6ba4363d-850d-4eb4-9461-bce1a44061e1",
+      "text": "Fix the annual toggle showing monthly prices in the pricing comparison table",
+      "dueDate": "Today",
+      "ownerSpeakerId": "eb83a1e5-7e99-456a-947f-da58d985ca5f"
+    },
+    {
+      "id": "b505322a-11e6-4407-b643-abd12d32206b",
+      "text": "Resolve the announcement banner overlapping the sidebar on narrow screens",
+      "dueDate": "Wednesday",
+      "ownerSpeakerId": "8ff4a245-4eb0-444e-991a-d86883d1cf3d"
+    },
+    {
+      "id": "17908971-ce92-4a5f-8862-24e19f67f8b0",
+      "text": "Draft the written rollback plan for the launch",
+      "dueDate": "Thursday",
+      "ownerSpeakerId": "84a56c38-f76d-4a22-8c58-e0cd707f0949"
+    }
+  ]
+}

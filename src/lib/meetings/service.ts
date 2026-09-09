@@ -14,7 +14,7 @@ import {
 
 import type { SummarizationProvider } from "@/lib/ai/summarization-provider";
 import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
-import type { Db } from "@/lib/db/client";
+import type { Db, Transaction } from "@/lib/db/client";
 import {
   actionItems,
   meetings,
@@ -685,7 +685,6 @@ export function createMeetingService(db: Db, config: MeetingServiceConfig) {
   };
 }
 
-type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 /** Anything queries can run on: the shared handle or an open transaction. */
 type Executor = Db | Transaction;
 

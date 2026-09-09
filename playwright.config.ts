@@ -6,6 +6,8 @@ const port = Number(process.env.E2E_PORT ?? 3000);
 
 export default defineConfig({
   testDir: "./e2e",
+  // Seeds the Sample Meetings the specs browse, exactly as the Docker entrypoint does.
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
