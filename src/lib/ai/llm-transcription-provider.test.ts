@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createClaudeTranscriptionProvider } from "@/lib/ai/claude-transcription-provider";
+import { createLlmTranscriptionProvider } from "@/lib/ai/llm-transcription-provider";
 import type { TranscriptionInput } from "@/lib/ai/transcription-provider";
 import type { Transcript } from "@/lib/meetings/transcript";
 
@@ -28,10 +28,10 @@ const TRANSCRIPT: Transcript = {
   ],
 };
 
-describe("Claude TranscriptionProvider", () => {
+describe("LLM TranscriptionProvider", () => {
   it("returns the generated Transcript", async () => {
     const { generator } = generatorAnswering(TRANSCRIPT);
-    const provider = createClaudeTranscriptionProvider(generator);
+    const provider = createLlmTranscriptionProvider(generator);
     await expect(provider.generateTranscript(INPUT)).resolves.toEqual(
       TRANSCRIPT,
     );
@@ -39,9 +39,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("asks for a Transcript with the title, agenda, every Speaker and id, duration and target count", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript(
-      INPUT,
-    );
+    await createLlmTranscriptionProvider(generator).generateTranscript(INPUT);
 
     expect(requests).toHaveLength(1);
     const [request] = requests;
@@ -63,9 +61,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("anchors the timeline: Utterance numbers with start times up to the last one", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript(
-      INPUT,
-    );
+    await createLlmTranscriptionProvider(generator).generateTranscript(INPUT);
     // 50 Utterances over 10 minutes: one every 12 s, anchors every 6 Utterances, ending on the 50th.
     expect(requests[0].prompt).toContain(
       "1 at 00:00, 7 at 01:12, 13 at 02:24, 19 at 03:36, 25 at 04:48, 31 at 06:00, 37 at 07:12, 43 at 08:24, 49 at 09:36, 50 at 09:48",
@@ -74,9 +70,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("tells the model the pace: average seconds and words per Utterance", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript(
-      INPUT,
-    );
+    await createLlmTranscriptionProvider(generator).generateTranscript(INPUT);
     // 10 minutes over 50 Utterances is 12 s each, about 30 words at 150 words a minute.
     expect(requests[0].prompt).toMatch(/about 12 seconds/);
     expect(requests[0].prompt).toMatch(/about 30 words/);
@@ -84,7 +78,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("says so when the Meeting has no agenda", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript({
+    await createLlmTranscriptionProvider(generator).generateTranscript({
       ...INPUT,
       agenda: null,
     });
@@ -93,9 +87,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("hands over the Meeting-aware schema: bounds, order and known Speakers", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript(
-      INPUT,
-    );
+    await createLlmTranscriptionProvider(generator).generateTranscript(INPUT);
     const { schema } = requests[0];
 
     expect(schema.safeParse(TRANSCRIPT).success).toBe(true);
@@ -125,9 +117,7 @@ describe("Claude TranscriptionProvider", () => {
 
   it("rejects a Transcript in which a Speaker never says anything", async () => {
     const { generator, requests } = generatorAnswering(TRANSCRIPT);
-    await createClaudeTranscriptionProvider(generator).generateTranscript(
-      INPUT,
-    );
+    await createLlmTranscriptionProvider(generator).generateTranscript(INPUT);
     const result = requests[0].schema.safeParse({
       utterances: TRANSCRIPT.utterances.slice(0, 2),
     });

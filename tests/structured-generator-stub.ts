@@ -1,6 +1,6 @@
-import type { StructuredRequest } from "@/lib/ai/claude-structured-generator";
+import type { StructuredRequest } from "@/lib/ai/structured-generator";
 
-/** A ClaudeStructuredGenerator that records every request and answers each with `output`. */
+/** A StructuredGenerator that records every request and answers each with `output`. */
 export function generatorAnswering(output: unknown) {
   const requests: StructuredRequest<unknown>[] = [];
   return {

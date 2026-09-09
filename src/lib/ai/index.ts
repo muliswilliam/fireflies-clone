@@ -4,12 +4,10 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { getEnv } from "@/lib/env";
 
-import {
-  createClaudeStructuredGenerator,
-  type ClaudeStructuredGenerator,
-} from "./claude-structured-generator";
-import { createClaudeSummarizationProvider } from "./claude-summarization-provider";
-import { createClaudeTranscriptionProvider } from "./claude-transcription-provider";
+import { createAnthropicStructuredGenerator } from "./anthropic-structured-generator";
+import type { StructuredGenerator } from "./structured-generator";
+import { createLlmSummarizationProvider } from "./llm-summarization-provider";
+import { createLlmTranscriptionProvider } from "./llm-transcription-provider";
 import { createFakeSummarizationProvider } from "./fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "./fake-transcription-provider";
 import {
@@ -50,7 +48,7 @@ function selectTranscriptionProvider(): TranscriptionProvider {
     case "fake":
       return createFakeTranscriptionProvider();
     case "claude":
-      return createClaudeTranscriptionProvider(createClaudeGenerator());
+      return createLlmTranscriptionProvider(createAnthropicGenerator());
   }
 }
 
@@ -59,14 +57,14 @@ function selectSummarizationProvider(): SummarizationProvider {
     case "fake":
       return createFakeSummarizationProvider();
     case "claude":
-      return createClaudeSummarizationProvider(createClaudeGenerator());
+      return createLlmSummarizationProvider(createAnthropicGenerator());
   }
 }
 
 /** `getEnv` has already insisted on the key when the provider is `claude`. */
-function createClaudeGenerator(): ClaudeStructuredGenerator {
+function createAnthropicGenerator(): StructuredGenerator {
   const env = getEnv();
-  return createClaudeStructuredGenerator({
+  return createAnthropicStructuredGenerator({
     client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
     model: env.AI_MODEL,
   });

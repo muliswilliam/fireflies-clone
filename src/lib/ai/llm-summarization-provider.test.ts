@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createClaudeSummarizationProvider } from "@/lib/ai/claude-summarization-provider";
+import { createLlmSummarizationProvider } from "@/lib/ai/llm-summarization-provider";
 import type { SummarizationInput } from "@/lib/ai/summarization-provider";
 import type { SummarizationOutput } from "@/lib/meetings/summary";
 
@@ -45,17 +45,17 @@ const OUTPUT: SummarizationOutput = {
   ],
 };
 
-describe("Claude SummarizationProvider", () => {
+describe("LLM SummarizationProvider", () => {
   it("returns the generated Summary and Action Items", async () => {
     const { generator } = generatorAnswering(OUTPUT);
     await expect(
-      createClaudeSummarizationProvider(generator).summarize(INPUT),
+      createLlmSummarizationProvider(generator).summarize(INPUT),
     ).resolves.toEqual(OUTPUT);
   });
 
   it("asks for a Summary with the title, agenda, Speakers with ids and the timestamped Transcript", async () => {
     const { generator, requests } = generatorAnswering(OUTPUT);
-    await createClaudeSummarizationProvider(generator).summarize(INPUT);
+    await createLlmSummarizationProvider(generator).summarize(INPUT);
 
     expect(requests).toHaveLength(1);
     const [request] = requests;
@@ -78,7 +78,7 @@ describe("Claude SummarizationProvider", () => {
 
   it("hands over the Meeting-aware schema: owners must be the Meeting's Speakers", async () => {
     const { generator, requests } = generatorAnswering(OUTPUT);
-    await createClaudeSummarizationProvider(generator).summarize(INPUT);
+    await createLlmSummarizationProvider(generator).summarize(INPUT);
     const { schema } = requests[0];
 
     expect(schema.safeParse(OUTPUT).success).toBe(true);

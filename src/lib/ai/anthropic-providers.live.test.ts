@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 
-import { createClaudeStructuredGenerator } from "@/lib/ai/claude-structured-generator";
-import { createClaudeSummarizationProvider } from "@/lib/ai/claude-summarization-provider";
-import { createClaudeTranscriptionProvider } from "@/lib/ai/claude-transcription-provider";
+import { createAnthropicStructuredGenerator } from "@/lib/ai/anthropic-structured-generator";
+import { createLlmSummarizationProvider } from "@/lib/ai/llm-summarization-provider";
+import { createLlmTranscriptionProvider } from "@/lib/ai/llm-transcription-provider";
 import { generateFakeTranscript } from "@/lib/ai/fake-transcription-provider";
 import type { TranscriptionInput } from "@/lib/ai/transcription-provider";
 import { DEFAULT_AI_MODEL } from "@/lib/env";
@@ -36,8 +36,8 @@ const INPUT: TranscriptionInput = {
   targetUtteranceCount: targetUtteranceCount(DURATION_MS),
 };
 
-describe.skipIf(!live)("Claude providers (live)", () => {
-  const generator = createClaudeStructuredGenerator({
+describe.skipIf(!live)("Anthropic providers (live)", () => {
+  const generator = createAnthropicStructuredGenerator({
     client: new Anthropic(),
     model: process.env.AI_MODEL ?? DEFAULT_AI_MODEL,
   });
@@ -47,7 +47,7 @@ describe.skipIf(!live)("Claude providers (live)", () => {
     { timeout: 180_000 },
     async () => {
       const transcript =
-        await createClaudeTranscriptionProvider(generator).generateTranscript(
+        await createLlmTranscriptionProvider(generator).generateTranscript(
           INPUT,
         );
       console.log(JSON.stringify(transcript, null, 2));
@@ -76,9 +76,7 @@ describe.skipIf(!live)("Claude providers (live)", () => {
     "summarizes a Transcript with Action Item owners drawn from the Speakers",
     { timeout: 180_000 },
     async () => {
-      const output = await createClaudeSummarizationProvider(
-        generator,
-      ).summarize({
+      const output = await createLlmSummarizationProvider(generator).summarize({
         title: INPUT.title,
         agenda: INPUT.agenda,
         speakers: SPEAKERS,

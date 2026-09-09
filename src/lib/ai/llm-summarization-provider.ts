@@ -6,8 +6,8 @@ import {
   summarizationOutputSchemaFor,
 } from "@/lib/meetings/summary";
 
-import { speakerList } from "./claude-prompt";
-import type { ClaudeStructuredGenerator } from "./claude-structured-generator";
+import { speakerList } from "./prompt";
+import type { StructuredGenerator } from "./structured-generator";
 import type {
   SummarizationInput,
   SummarizationProvider,
@@ -21,11 +21,11 @@ Everything you write must be supported by the Transcript. Do not invent decision
 Answer only with the JSON document that matches the required schema.`;
 
 /**
- * The Claude SummarizationProvider: one structured-output call whose answer is checked
+ * The LLM SummarizationProvider: one structured-output call whose answer is checked
  * against the Meeting's own rule that Action Item owners are its Speakers.
  */
-export function createClaudeSummarizationProvider(
-  generator: ClaudeStructuredGenerator,
+export function createLlmSummarizationProvider(
+  generator: StructuredGenerator,
 ): SummarizationProvider {
   return {
     summarize(input) {

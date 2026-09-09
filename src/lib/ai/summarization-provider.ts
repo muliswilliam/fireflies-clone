@@ -13,7 +13,7 @@ export type SummarizationInput = {
 
 /**
  * Distils a Transcript into a Summary and Action Items.
- * Implementations: a deterministic fake for tests and, in #8, Claude.
+ * Implementations: a deterministic fake for tests, and a model-backed one over a StructuredGenerator.
  * Callers validate the result with `summarizationOutputSchemaFor`; a rejected result is a provider error.
  */
 export interface SummarizationProvider {

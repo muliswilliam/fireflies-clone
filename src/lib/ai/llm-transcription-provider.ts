@@ -4,8 +4,8 @@ import {
   type Transcript,
 } from "@/lib/meetings/transcript";
 
-import { speakerList } from "./claude-prompt";
-import type { ClaudeStructuredGenerator } from "./claude-structured-generator";
+import { speakerList } from "./prompt";
+import type { StructuredGenerator } from "./structured-generator";
 import type {
   TranscriptionInput,
   TranscriptionProvider,
@@ -28,11 +28,11 @@ Write natural spoken English with the occasional filler or self-correction. No n
 Answer only with the JSON document that matches the required schema.`;
 
 /**
- * The Claude TranscriptionProvider (ADR-0001): one structured-output call whose answer is
+ * The LLM TranscriptionProvider (ADR-0001): one structured-output call whose answer is
  * checked against the Meeting's own rules (timestamp bounds, order, known Speakers).
  */
-export function createClaudeTranscriptionProvider(
-  generator: ClaudeStructuredGenerator,
+export function createLlmTranscriptionProvider(
+  generator: StructuredGenerator,
 ): TranscriptionProvider {
   return {
     generateTranscript(input) {
@@ -40,7 +40,7 @@ export function createClaudeTranscriptionProvider(
         document: "Transcript",
         system: SYSTEM,
         prompt: transcriptPrompt(input),
-        schema: claudeTranscriptSchemaFor(input),
+        schema: llmTranscriptSchemaFor(input),
         maxTokens: MAX_TOKENS,
         effort: EFFORT,
       });
@@ -48,8 +48,8 @@ export function createClaudeTranscriptionProvider(
   };
 }
 
-/** The Meeting's Transcript rules plus what the prompt asks of Claude: every Speaker gets a turn. */
-export function claudeTranscriptSchemaFor(input: TranscriptionInput) {
+/** The Meeting's Transcript rules plus what the prompt asks of the model: every Speaker gets a turn. */
+export function llmTranscriptSchemaFor(input: TranscriptionInput) {
   const speakerIds = input.speakers.map((speaker) => speaker.id);
   return transcriptSchemaFor({
     durationMs: input.durationMs,

@@ -63,9 +63,13 @@ Health: `GET /api/health` returns `200 {"status":"ok","database":"ok"}` when the
 
 Tests use `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5433/firefly_notes_test`) so they never touch development data. First run: `pnpm exec playwright install chromium`. If something else already listens on port 3000, run e2e with `E2E_PORT=3001 pnpm test:e2e`; locally it reuses a dev server already running on that port, which must then have been started with `E2E_FAULT_INJECTION=1` for the failure tests: that flag lets a Meeting title containing `[fail:transcribing]` or `[fail:summarizing]` make the fake provider fail once, so Retry can be exercised end to end. Never set it outside tests.
 
-Live smoke tests for the Claude providers (`src/lib/ai/claude-providers.live.test.ts`) call the real API, so they only run when both `RUN_LIVE=1` and `ANTHROPIC_API_KEY` are set: `RUN_LIVE=1 ANTHROPIC_API_KEY=sk-ant-... pnpm test src/lib/ai/claude-providers.live`. Otherwise they are skipped, and CI never sets them.
+Live smoke tests for the Claude providers (`src/lib/ai/anthropic-providers.live.test.ts`) call the real API, so they only run when both `RUN_LIVE=1` and `ANTHROPIC_API_KEY` are set: `RUN_LIVE=1 ANTHROPIC_API_KEY=sk-ant-... pnpm test src/lib/ai/claude-providers.live`. Otherwise they are skipped, and CI never sets them.
 
 GitHub Actions runs all four on every push and pull request, plus a Docker image build.
+
+## Adding another AI vendor
+
+The Transcript and Summary prompts in `src/lib/ai/llm-*-provider.ts` depend only on the `StructuredGenerator` interface (`src/lib/ai/structured-generator.ts`): a system prompt, a user prompt, a Zod schema the answer must satisfy, a token ceiling and an optional effort. `anthropic-structured-generator.ts` is the one implementation. Another vendor is one more implementation of that interface plus a case in `src/lib/ai/index.ts`; the prompts, the pipeline, the schemas and the UI do not change. The fake providers take the other route and replace the whole provider, which is what a real speech-to-text vendor would do (ADR-0001).
 
 ## Docker
 

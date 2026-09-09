@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import {
-  ClaudeProviderError,
-  createClaudeStructuredGenerator,
+  createAnthropicStructuredGenerator,
   SERVER_SIDE_FALLBACK_BETA,
+} from "@/lib/ai/anthropic-structured-generator";
+import {
+  ProviderError,
   type StructuredRequest,
-} from "@/lib/ai/claude-structured-generator";
+} from "@/lib/ai/structured-generator";
 
 const answerSchema = z.object({
   answer: z.string().min(1),
@@ -108,7 +110,7 @@ type Captured = {
   body: Record<string, unknown>;
 };
 
-/** A generator whose Claude client talks to `respond` instead of the network; records what it sent. */
+/** A generator whose Anthropic client talks to `respond` instead of the network; records what it sent. */
 function generatorWith(respond: () => Response | Promise<Response>) {
   const captured: Captured[] = [];
   const client = new Anthropic({
@@ -125,14 +127,14 @@ function generatorWith(respond: () => Response | Promise<Response>) {
   });
   return {
     captured,
-    generator: createClaudeStructuredGenerator({
+    generator: createAnthropicStructuredGenerator({
       client,
       model: "claude-opus-5",
     }),
   };
 }
 
-describe("Claude structured generator", () => {
+describe("Anthropic structured generator", () => {
   it("returns the model's JSON once it passes the Zod schema", async () => {
     const { generator } = generatorWith(() =>
       sseResponse(
@@ -194,9 +196,9 @@ describe("Claude structured generator", () => {
       sseResponse(textStream(JSON.stringify({ answer: "", confidence: 150 }))),
     );
     const failure = generator.generate(REQUEST);
-    await expect(failure).rejects.toBeInstanceOf(ClaudeProviderError);
+    await expect(failure).rejects.toBeInstanceOf(ProviderError);
     await expect(failure).rejects.toThrowError(
-      /Claude returned an invalid Transcript: .*answer/,
+      /The model returned an invalid Transcript: .*answer/,
     );
   });
 
@@ -205,7 +207,7 @@ describe("Claude structured generator", () => {
       sseResponse(textStream("Sorry, here is prose instead of JSON.")),
     );
     await expect(generator.generate(REQUEST)).rejects.toThrowError(
-      /Claude returned an invalid Transcript: not valid JSON/,
+      /The model returned an invalid Transcript: not valid JSON/,
     );
   });
 
@@ -219,7 +221,7 @@ describe("Claude structured generator", () => {
       ),
     );
     const failure = generator.generate(REQUEST);
-    await expect(failure).rejects.toBeInstanceOf(ClaudeProviderError);
+    await expect(failure).rejects.toBeInstanceOf(ProviderError);
     await expect(failure).rejects.toThrowError(
       /Claude declined to produce the Transcript \(cyber\)/,
     );
@@ -246,7 +248,7 @@ describe("Claude structured generator", () => {
         ),
     );
     const failure = generator.generate(REQUEST);
-    await expect(failure).rejects.toBeInstanceOf(ClaudeProviderError);
+    await expect(failure).rejects.toBeInstanceOf(ProviderError);
     await expect(failure).rejects.toThrowError(/Claude API error 529/);
   });
 
@@ -274,7 +276,7 @@ describe("Claude structured generator", () => {
       throw new TypeError("fetch failed");
     });
     const failure = generator.generate(REQUEST);
-    await expect(failure).rejects.toBeInstanceOf(ClaudeProviderError);
+    await expect(failure).rejects.toBeInstanceOf(ProviderError);
     await expect(failure).rejects.toThrowError(
       /Could not reach the Claude API/,
     );
