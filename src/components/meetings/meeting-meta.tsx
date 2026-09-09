@@ -5,7 +5,10 @@ import {
   recordingDurationMs,
 } from "@/lib/format";
 
-/** The one-line summary under a Meeting title: when it started, how long it ran, who was there. */
+/**
+ * The one-line summary under a Meeting title: when it started, how long it ran, who was there.
+ * On a narrow screen it may wrap, but only between segments, never inside one.
+ */
 export function MeetingMeta({
   meeting,
   speakerCount,
@@ -19,12 +22,24 @@ export function MeetingMeta({
 
   return (
     <p className={className}>
-      <time dateTime={meeting.recordingStartedAt.toISOString()}>
+      <time
+        dateTime={meeting.recordingStartedAt.toISOString()}
+        className="whitespace-nowrap"
+      >
         {formatDateTime(meeting.recordingStartedAt)}
       </time>
-      {durationMs !== null && <> · {formatDuration(durationMs)}</>}
+      {durationMs !== null && (
+        <>
+          {" · "}
+          <span className="whitespace-nowrap">
+            {formatDuration(durationMs)}
+          </span>
+        </>
+      )}
       {" · "}
-      {pluralize(speakerCount, "Speaker", "Speakers")}
+      <span className="whitespace-nowrap">
+        {pluralize(speakerCount, "Speaker", "Speakers")}
+      </span>
     </p>
   );
 }

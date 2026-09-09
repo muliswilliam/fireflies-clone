@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { createFakeSummarizationProvider } from "./fake-summarization-provider";
+import { createFakeSummarizationProvider } from "@/lib/ai/fake-summarization-provider";
 import {
   createFakeTranscriptionProvider,
   generateFakeTranscript,
-} from "./fake-transcription-provider";
+} from "@/lib/ai/fake-transcription-provider";
+import type { SummarizationInput } from "@/lib/ai/summarization-provider";
+import type { TranscriptionInput } from "@/lib/ai/transcription-provider";
+
 import {
   failureMarkerIn,
+  throwIfPageFaultRequested,
   withSummarizationFaultInjection,
   withTranscriptionFaultInjection,
 } from "./fault-injection";
-import type { SummarizationInput } from "./summarization-provider";
-import type { TranscriptionInput } from "./transcription-provider";
 
 const speakers = [
   { id: "00000000-0000-4000-8000-000000000001", name: "Amara" },
@@ -115,5 +117,22 @@ describe("withSummarizationFaultInjection", () => {
     await expect(
       provider.summarize(summarizationInput("Sync [fail:transcribing]")),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("throwIfPageFaultRequested", () => {
+  it("throws for a search that carries the [fail:page] marker", () => {
+    expect(() => throwIfPageFaultRequested("[fail:page]")).toThrow(
+      /Injected page failure/,
+    );
+    expect(() => throwIfPageFaultRequested("sync [fail:page]")).toThrow();
+  });
+
+  it("does nothing for any other search, including the provider markers", () => {
+    expect(() => throwIfPageFaultRequested("")).not.toThrow();
+    expect(() => throwIfPageFaultRequested("Q3 roadmap sync")).not.toThrow();
+    expect(() =>
+      throwIfPageFaultRequested("Sync [fail:transcribing]"),
+    ).not.toThrow();
   });
 });

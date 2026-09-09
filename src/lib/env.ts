@@ -16,7 +16,7 @@ const serverEnvSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     /** Global cap on non-sample Meetings created in any rolling 24 hours (ADR-0005). */
     MAX_MEETINGS_PER_DAY: z.coerce.number().int().positive().default(50),
-    /** Test only: lets a Meeting title ask a provider to fail once (`src/lib/ai/fault-injection.ts`). */
+    /** Test only: lets a Meeting title ask a provider to fail once (`src/lib/fault-injection.ts`). */
     E2E_FAULT_INJECTION: z.stringbool().default(false),
   })
   .superRefine((env, ctx) => {

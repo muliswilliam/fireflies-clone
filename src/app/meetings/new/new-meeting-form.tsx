@@ -248,7 +248,7 @@ function DurationOptions({ invalid }: { invalid: boolean }) {
       {INSTANT_MEETING_DURATION_OPTIONS_MINUTES.map((minutes) => (
         <label
           key={minutes}
-          className="text-muted-foreground has-checked:bg-foreground has-checked:text-background has-focus-visible:ring-ring/50 relative cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium tabular-nums select-none has-focus-visible:ring-3"
+          className="text-muted-foreground has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-ring/50 relative cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium tabular-nums select-none has-focus-visible:ring-3"
         >
           <input
             type="radio"

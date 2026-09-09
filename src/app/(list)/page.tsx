@@ -1,11 +1,14 @@
 import { Mic, Plus, Search } from "lucide-react";
 import Link from "next/link";
 
+import { LinkPendingSpinner } from "@/components/link-pending-spinner";
 import { MeetingMeta } from "@/components/meetings/meeting-meta";
 import { SampleBadge } from "@/components/meetings/sample-badge";
 import { StatusBadge } from "@/components/meetings/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getEnv } from "@/lib/env";
+import { throwIfPageFaultRequested } from "@/lib/fault-injection";
 import { getMeetingService, type MeetingListItem } from "@/lib/meetings";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function HomePage({ searchParams }: PageProps<"/">) {
   const { q } = await searchParams;
   const search = typeof q === "string" ? q : "";
+  if (getEnv().E2E_FAULT_INJECTION) throwIfPageFaultRequested(search);
   const list = await getMeetingService().listMeetings({ search });
 
   return (
@@ -75,7 +79,10 @@ function MeetingRow({ meeting }: { meeting: MeetingListItem }) {
             className="text-muted-foreground mt-1 text-sm"
           />
         </div>
-        <StatusBadge status={meeting.status} className="shrink-0" />
+        <span className="flex shrink-0 items-center gap-3">
+          <LinkPendingSpinner />
+          <StatusBadge status={meeting.status} />
+        </span>
       </Link>
     </li>
   );
