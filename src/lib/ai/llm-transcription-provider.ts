@@ -11,15 +11,10 @@ import type {
   TranscriptionProvider,
 } from "./transcription-provider";
 
-/** Well above what 80 Utterances need; the ceiling only matters if the model runs away. */
+/** Ceiling only; 80 Utterances take about 8k tokens. */
 const MAX_TOKENS = 64_000;
 
-/**
- * Measured on Claude Opus 5 for an 80-Utterance Transcript: at the default effort the model
- * spent over five minutes thinking about the timeline before writing; at low effort it thinks
- * not at all, writes the same well-paced Transcript in about two minutes, and stays inside the
- * pipeline's provider timeout. Dialogue is bulk output, not hard reasoning.
- */
+/** Dialogue is bulk output; at the default effort the model thinks for minutes about the timeline first. */
 const EFFORT = "low";
 
 const SYSTEM = `You write the Transcript of a business meeting that has just ended, as if it had been recorded and transcribed.
@@ -27,10 +22,7 @@ The Transcript must read like a real conversation among the named Speakers about
 Write natural spoken English with the occasional filler or self-correction. No narration, no stage directions, no speaker names or labels inside the spoken text.
 Answer only with the JSON document that matches the required schema.`;
 
-/**
- * The LLM TranscriptionProvider (ADR-0001): one structured-output call whose answer is
- * checked against the Meeting's own rules (timestamp bounds, order, known Speakers).
- */
+/** TranscriptionProvider over a StructuredGenerator (ADR-0001). */
 export function createLlmTranscriptionProvider(
   generator: StructuredGenerator,
 ): TranscriptionProvider {
@@ -48,7 +40,7 @@ export function createLlmTranscriptionProvider(
   };
 }
 
-/** The Meeting's Transcript rules plus what the prompt asks of the model: every Speaker gets a turn. */
+/** The Meeting's Transcript rules plus: every Speaker speaks. */
 export function llmTranscriptSchemaFor(input: TranscriptionInput) {
   const speakerIds = input.speakers.map((speaker) => speaker.id);
   return transcriptSchemaFor({
@@ -65,15 +57,14 @@ export function llmTranscriptSchemaFor(input: TranscriptionInput) {
   );
 }
 
-/** Spoken English runs at about 150 words a minute. */
+/** About 150 words a minute of speech. */
 const WORDS_PER_SECOND = 2.5;
 
-/** How many timeline anchors the prompt lists; enough to keep the pace honest without a wall of numbers. */
+/** Timeline anchors listed in the prompt. */
 const ANCHOR_COUNT = 8;
 
 export function transcriptPrompt(input: TranscriptionInput): string {
-  // Without a concrete pace the model writes short turns and the conversation ends long before
-  // the Recording does; the average slot and its word count anchor both timing and length.
+  // A concrete pace keeps turns long enough to fill the Recording.
   const secondsPerUtterance = Math.round(
     input.durationMs / 1000 / input.targetUtteranceCount,
   );
@@ -95,11 +86,7 @@ Rules:
 - The conversation works through the agenda and ends with a clear wrap-up of what was decided and who does what.`;
 }
 
-/**
- * "1 at 00:00, 11 at 03:45, ..., 80 at 29:37". Measured on Claude Opus 5: with only an average
- * pace to go on, the model ends a 30-minute Meeting anywhere between 12 and 30 minutes in; with
- * these anchors it lands within the last minute every time, and without thinking about it.
- */
+/** "1 at 00:00, 11 at 03:45, ..., 80 at 29:37". Without anchors the model ends a 30-minute Meeting anywhere from 12 to 30 minutes in. */
 export function timelineAnchors(input: TranscriptionInput): string {
   const count = input.targetUtteranceCount;
   const slotMs = input.durationMs / count;

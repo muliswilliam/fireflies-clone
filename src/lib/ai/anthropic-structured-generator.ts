@@ -16,10 +16,7 @@ export type AnthropicStructuredGeneratorConfig = {
   model: string;
 };
 
-/**
- * The StructuredGenerator over the official Anthropic SDK: one streamed Messages call with
- * adaptive thinking and structured output. The only module that knows the vendor.
- */
+/** StructuredGenerator over the official Anthropic SDK: one streamed call, adaptive thinking, structured output. */
 export function createAnthropicStructuredGenerator(
   config: AnthropicStructuredGeneratorConfig,
 ): StructuredGenerator {
@@ -35,11 +32,10 @@ async function requestMessage<T>(
   { client, model }: AnthropicStructuredGeneratorConfig,
   request: StructuredRequest<T>,
 ): Promise<Anthropic.Beta.BetaMessage> {
-  // The SDK's Zod helper derives the JSON Schema (and strips what the API does not accept).
-  // Only its schema is sent: validation is done by parseStructuredOutput so a rejected answer names the issue.
+  // Only the derived JSON Schema is sent; parseStructuredOutput validates so failures name the issue.
   const { schema } = betaZodOutputFormat(request.schema);
   try {
-    // Streaming keeps a long generation clear of HTTP timeouts; finalMessage() assembles it.
+    // Streaming keeps long generations clear of HTTP timeouts.
     return await client.beta.messages
       .stream({
         model,
@@ -60,13 +56,13 @@ async function requestMessage<T>(
   }
 }
 
-/** The answer's text, once the stop reason says there is a complete answer to read. */
+/** The answer text, after checking the stop reason. */
 function textOf<T>(
   request: StructuredRequest<T>,
   message: Anthropic.Beta.BetaMessage,
 ): string {
   const { document } = request;
-  // A refusal can arrive with no content at all, so it is checked before the content is read.
+  // A refusal may carry no content, so check it first.
   if (message.stop_reason === "refusal") {
     const category = message.stop_details?.category;
     throw new ProviderError(
@@ -84,7 +80,7 @@ function textOf<T>(
     .join("");
 }
 
-/** Wraps SDK failures, most specific first, in the words a failed Meeting shows. */
+/** SDK failures, most specific first, in the words a failed Meeting shows. */
 function toProviderError(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
   if (error instanceof Anthropic.AuthenticationError) {

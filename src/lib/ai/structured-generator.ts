@@ -6,11 +6,8 @@ import {
 } from "@/lib/meetings/provider-output";
 
 /**
- * The seam between the prompts and the model vendor. A StructuredGenerator makes one model
- * call that must answer with a JSON document matching a Zod schema. The Transcript and Summary
- * providers are prompts over this interface and know nothing about which vendor answers;
- * `anthropic-structured-generator.ts` is the one implementation, and another vendor is one
- * more file plus a case in the provider factory.
+ * One model call that must answer with JSON matching a Zod schema. The prompts depend on this
+ * seam; the vendor lives only in its implementation (`anthropic-structured-generator.ts`).
  */
 export interface StructuredGenerator {
   generate<T>(request: StructuredRequest<T>): Promise<T>;
@@ -21,7 +18,7 @@ export type StructuredRequest<T> = {
   document: ProviderDocument;
   system: string;
   prompt: string;
-  /** The response must satisfy this schema; implementations send its JSON Schema as the output format. */
+  /** The answer must satisfy this schema; its JSON Schema is sent as the output format. */
   schema: z.ZodType<T>;
   maxTokens: number;
   /** How much the model may reason before answering; omitted means the vendor's default. */
@@ -38,7 +35,7 @@ export class ProviderError extends Error {
   }
 }
 
-/** Parses the model's text as JSON and checks it against the request's schema; anything wrong is a ProviderError naming the issue. */
+/** JSON-parses and validates the model text; anything wrong is a ProviderError naming the issue. */
 export function parseStructuredOutput<T>(
   request: StructuredRequest<T>,
   text: string,

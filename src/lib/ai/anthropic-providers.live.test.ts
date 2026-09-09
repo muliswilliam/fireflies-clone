@@ -13,10 +13,7 @@ import {
   transcriptSchemaFor,
 } from "@/lib/meetings/transcript";
 
-/**
- * Live smoke tests against the real Claude API. They cost money and take a minute, so they
- * only run with `RUN_LIVE=1` and an `ANTHROPIC_API_KEY`; CI never sets either and stays on the fake.
- */
+/** Real API calls: only with RUN_LIVE=1 and ANTHROPIC_API_KEY. CI sets neither. */
 const live = process.env.RUN_LIVE === "1" && !!process.env.ANTHROPIC_API_KEY;
 
 const SPEAKERS = [
@@ -62,7 +59,7 @@ describe.skipIf(!live)("Anthropic providers (live)", () => {
         transcript.utterances.map((utterance) => utterance.speakerId),
       );
       expect(used.size).toBe(SPEAKERS.length);
-      // The count is asked for, not enforced by the schema; a smoke test tolerates some drift.
+      // The count is asked for, not enforced; tolerate drift.
       expect(transcript.utterances.length).toBeGreaterThanOrEqual(
         Math.floor(INPUT.targetUtteranceCount * 0.6),
       );

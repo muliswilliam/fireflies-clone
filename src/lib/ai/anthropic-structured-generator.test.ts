@@ -110,7 +110,7 @@ type Captured = {
   body: Record<string, unknown>;
 };
 
-/** A generator whose Anthropic client talks to `respond` instead of the network; records what it sent. */
+/** A generator over a client whose fetch is `respond`; records what it sent. */
 function generatorWith(respond: () => Response | Promise<Response>) {
   const captured: Captured[] = [];
   const client = new Anthropic({

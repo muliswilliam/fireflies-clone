@@ -33,10 +33,8 @@ const serverEnvSchema = z
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 
 /**
- * Parses server environment from `source` (normally `process.env`). A blank value, as in
- * `ANTHROPIC_API_KEY=` left over from `.env.example`, counts as not set.
- * `AI_PROVIDER` defaults to `claude`, except under `NODE_ENV=test` where it is `fake` so
- * tests and e2e never pay for Claude unless they ask to. Throws naming what is wrong.
+ * Parses server environment; blank values count as unset. `AI_PROVIDER` defaults to `claude`,
+ * or `fake` under `NODE_ENV=test`. Throws naming what is wrong.
  */
 export function parseServerEnv(
   source: Record<string, string | undefined>,

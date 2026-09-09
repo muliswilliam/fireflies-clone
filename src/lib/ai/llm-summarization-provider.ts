@@ -13,17 +13,14 @@ import type {
   SummarizationProvider,
 } from "./summarization-provider";
 
-/** A Summary is short; the ceiling only matters if the model runs away. */
+/** Ceiling only. */
 const MAX_TOKENS = 16_000;
 
 const SYSTEM = `You distil a meeting Transcript into a Summary: an Overview, Key Takeaways and Action Items.
 Everything you write must be supported by the Transcript. Do not invent decisions, owners or dates, and do not pad with generalities.
 Answer only with the JSON document that matches the required schema.`;
 
-/**
- * The LLM SummarizationProvider: one structured-output call whose answer is checked
- * against the Meeting's own rule that Action Item owners are its Speakers.
- */
+/** SummarizationProvider over a StructuredGenerator. */
 export function createLlmSummarizationProvider(
   generator: StructuredGenerator,
 ): SummarizationProvider {
