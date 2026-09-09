@@ -88,7 +88,25 @@ The multi-stage image runs migrations on start, then seeds the Sample Meetings, 
 
 ## Deploy
 
-Dokploy at `fireflies.williammuli.dev`, auto-deploying from `main`. Deployment is set up in #11 and documented in `docs/submission.md` in #12.
+Production runs at [fireflies.williammuli.dev](https://fireflies.williammuli.dev) on a self-hosted [Dokploy](https://dokploy.com). Every push to `main` deploys; there is no manual release step.
+
+### Topology
+
+- **Dokploy project `fireflies`, environment `production`**, on one Dokploy-managed server. Two services live in it:
+  - **Application `app`**: source is this GitHub repository, branch `main`, built from the `Dockerfile` (multi-stage, Next standalone output), one replica listening on port 3000. Trigger type is push, so a GitHub webhook from the Dokploy GitHub App starts a build for every commit on `main`; the new container replaces the old one once it is up.
+  - **Postgres `db`**: `postgres:18` with its data on a named Docker volume. It has no external port; the app reaches it over Dokploy's internal Docker network, which is what `DATABASE_URL` points at.
+- **Environment** is set on the application in Dokploy: `DATABASE_URL` (internal hostname of `db`), `ANTHROPIC_API_KEY`, `AI_PROVIDER=claude`, `AI_MODEL` and `MAX_MEETINGS_PER_DAY`. `.env.example` documents each one. Nothing is baked into the image.
+- **Container start** runs `docker-entrypoint.sh`: apply Drizzle migrations, seed the Sample Meetings, then start the server. Both steps are idempotent, so a redeploy or restart is safe. The image's `HEALTHCHECK` polls `GET /api/health`, which also proves the database connection.
+- **Domain** `fireflies.williammuli.dev` is attached to `app` in Dokploy with a Let's Encrypt certificate; Dokploy's Traefik terminates TLS and redirects HTTP to HTTPS. DNS is a proxied Cloudflare A record for the server, so Cloudflare sits in front of Traefik.
+
+Check a deployment landed: the Dokploy deployments list shows the commit title and `done`, and `curl -i https://fireflies.williammuli.dev/api/health` returns `200 {"status":"ok","database":"ok"}`. Application logs in Dokploy show the three entrypoint steps on every start.
+
+### The two human steps
+
+Everything above is created through the Dokploy API except two steps that need a browser session with GitHub and Cloudflare credentials. Repeat them when re-creating the deployment.
+
+1. **Install the GitHub App.** Dokploy creates a GitHub App per project (here `fireflies-github`) and hands you an installation link. Open it, pick the account that owns `fireflies-clone`, grant the App access to that repository, and finish on GitHub. Dokploy stores the installation id; from then on it can clone the repository and receive push webhooks. Until this is done the application has no source and auto-deploy never fires.
+2. **Add the DNS record.** In the Cloudflare dashboard for `williammuli.dev`, add an A record `fireflies` pointing at the server's public IP with the proxy (orange cloud) enabled. Once it resolves, the first HTTPS request lets Traefik obtain the Let's Encrypt certificate.
 
 ## Third-party tools
 
