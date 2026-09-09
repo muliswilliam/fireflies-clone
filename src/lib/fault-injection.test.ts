@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { createFakeSummarizationProvider } from "./fake-summarization-provider";
+import { createFakeSummarizationProvider } from "@/lib/ai/fake-summarization-provider";
 import {
   createFakeTranscriptionProvider,
   generateFakeTranscript,
-} from "./fake-transcription-provider";
+} from "@/lib/ai/fake-transcription-provider";
+import type { SummarizationInput } from "@/lib/ai/summarization-provider";
+import type { TranscriptionInput } from "@/lib/ai/transcription-provider";
+
 import {
   failureMarkerIn,
   throwIfPageFaultRequested,
   withSummarizationFaultInjection,
   withTranscriptionFaultInjection,
 } from "./fault-injection";
-import type { SummarizationInput } from "./summarization-provider";
-import type { TranscriptionInput } from "./transcription-provider";
 
 const speakers = [
   { id: "00000000-0000-4000-8000-000000000001", name: "Amara" },

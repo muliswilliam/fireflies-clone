@@ -16,7 +16,7 @@ Firefly Notes is a simplified Fireflies.ai: record a Meeting, read its Transcrip
 
 ## Approach
 
-I spent the first block on thinking rather than code: an interview-style grilling of the brief, then a glossary ([`CONTEXT.md`](../CONTEXT.md)) that fixes the vocabulary (Meeting, Recording, Transcript, Utterance, Speaker, Summary, Action Item, Meeting Status, Sample Meeting, Instant Meeting), five architecture decision records, a spec, and a ticket breakdown into eleven tickets, ten vertical slices plus this polish pass. Every ticket after that was a thin end-to-end slice, test-first where a seam made that cheap, merged through a pull request with CI green.
+I spent the first block on thinking rather than code: an interview-style grilling of the brief, then a glossary ([`CONTEXT.md`](../CONTEXT.md)) that fixes the vocabulary (Meeting, Recording, Transcript, Utterance, Speaker, Summary, Action Item, Meeting Status, Sample Meeting, Instant Meeting), five architecture decision records, a spec, and a breakdown into eleven GitHub issues, ten vertical slices plus this polish pass. Every issue after that was a thin end-to-end slice, test-first where a seam made that cheap, merged through a pull request with CI green.
 
 The code is layered so behaviour lives in one place: UI (server components with small client islands) calls thin server actions and route handlers, which call a single **Meeting service** that owns every rule and Status transition, over a Drizzle repository on Postgres. The service depends on two small interfaces, `TranscriptionProvider` and `SummarizationProvider`, with a deterministic fake for tests and a Claude implementation for production. The Claude adapter streams one structured-output call per step, constrained by a JSON schema derived from the same Zod shapes that guard the database, and re-validates every answer.
 
@@ -50,4 +50,4 @@ Smaller calls worth naming: Next.js App Router with server actions to keep the r
 
 ## Time spent
 
-About **10 hours** of active work over two days, recorded session by session in [`TIME.md`](../TIME.md): 1.5 hours of grilling, glossary, ADRs and ticket breakdown, 7.9 hours across the ten feature and infrastructure tickets, and 0.6 hours on this polish and submission pass.
+About **10 hours** of active work over two days, recorded session by session in [`TIME.md`](../TIME.md): 1.5 hours of grilling, glossary, ADRs and ticket breakdown, 7.9 hours across the ten feature and infrastructure issues, and 0.6 hours on this polish and submission pass.

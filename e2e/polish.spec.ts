@@ -8,7 +8,7 @@ const [sample] = loadSampleMeetingFixtures();
 test("a page that throws shows the error boundary, with the header still in place", async ({
   page,
 }) => {
-  // E2E_FAULT_INJECTION lets this search make the list page throw (src/lib/ai/fault-injection.ts).
+  // E2E_FAULT_INJECTION lets this search make the list page throw (src/lib/fault-injection.ts).
   await page.goto("/?q=%5Bfail%3Apage%5D");
 
   await expect(
@@ -23,25 +23,32 @@ test("a page that throws shows the error boundary, with the header still in plac
   ).toBeVisible();
 });
 
-test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+const VIEWS = [
+  ["the list", "/"],
+  ["the New meeting form", "/meetings/new"],
+  ["a Meeting", `/meetings/${sample.id}`],
+] as const;
 
-  for (const [name, path] of [
-    ["the list", "/"],
-    ["the New meeting form", "/meetings/new"],
-    ["a Meeting", `/meetings/${sample.id}`],
-  ] as const) {
-    test(`${name} fits the viewport with no horizontal overflow`, async ({
-      page,
-    }) => {
-      await page.goto(path);
-      await expect(page.getByRole("main")).toBeVisible();
+for (const [device, viewport] of [
+  ["a phone", { width: 390, height: 844 }],
+  ["a laptop", { width: 1280, height: 800 }],
+] as const) {
+  test.describe(`on ${device}`, () => {
+    test.use({ viewport });
 
-      const widths = await page.evaluate(() => ({
-        scroll: document.documentElement.scrollWidth,
-        client: document.documentElement.clientWidth,
-      }));
-      expect(widths.scroll).toBeLessThanOrEqual(widths.client);
-    });
-  }
-});
+    for (const [name, path] of VIEWS) {
+      test(`${name} fits the viewport with no horizontal overflow`, async ({
+        page,
+      }) => {
+        await page.goto(path);
+        await expect(page.getByRole("main")).toBeVisible();
+
+        const widths = await page.evaluate(() => ({
+          scroll: document.documentElement.scrollWidth,
+          client: document.documentElement.clientWidth,
+        }));
+        expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+      });
+    }
+  });
+}

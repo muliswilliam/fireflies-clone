@@ -1,7 +1,6 @@
+import type { SummarizationProvider } from "@/lib/ai/summarization-provider";
+import type { TranscriptionProvider } from "@/lib/ai/transcription-provider";
 import { PROCESSING_STEPS, type ProcessingStep } from "@/lib/db/schema";
-
-import type { SummarizationProvider } from "./summarization-provider";
-import type { TranscriptionProvider } from "./transcription-provider";
 
 /**
  * Test-only fault injection, switched on by `E2E_FAULT_INJECTION=1`.
@@ -9,7 +8,8 @@ import type { TranscriptionProvider } from "./transcription-provider";
  * A Meeting whose title carries `[fail:transcribing]` or `[fail:summarizing]` makes the
  * provider for that step throw the first time it is asked about that title. The next call
  * (a Retry) goes through, so an end-to-end test can watch a Meeting fail and then recover
- * without any other channel into the server. Never enabled outside tests.
+ * without any other channel into the server. A list search carrying `[fail:page]` makes the
+ * list page throw, so a test can see the error boundary. Never enabled outside tests.
  *
  * "Once" is remembered inside the provider instance, which lives as long as the cached
  * Meeting service does; a dev-server hot reload forgets it and the next call fails again.

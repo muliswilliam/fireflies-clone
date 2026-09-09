@@ -51,17 +51,17 @@ The compose Postgres is published on host port 5433 so it never collides with a 
 
 ### Environment
 
-| Variable               | Required                      | Default                          | What it does                                                                                        |
-| ---------------------- | ----------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`         | yes                           |                                  | Postgres connection string. Migrations and the seeder use it too.                                   |
-| `AI_PROVIDER`          | no                            | `claude` (`fake` under `NODE_ENV=test`) | `claude` has Claude write Transcripts and Summaries; `fake` is deterministic and instant.    |
-| `ANTHROPIC_API_KEY`    | when `AI_PROVIDER=claude`     |                                  | Anthropic API key. The server refuses to start without it when the provider is `claude`.            |
-| `AI_MODEL`             | no                            | `claude-opus-5`                  | Claude model id used by the `claude` provider.                                                       |
-| `MAX_MEETINGS_PER_DAY` | no                            | `50`                             | Global cap on non-sample Meetings created in any rolling 24 hours (ADR-0005).                       |
-| `PORT`                 | no                            | `3000`                           | Port the server listens on. The Docker image honours it.                                            |
-| `E2E_FAULT_INJECTION`  | no, test only                 | `0`                              | `1` lets a Meeting title or search carry `[fail:transcribing]`, `[fail:summarizing]` or `[fail:page]` to fail once, so e2e can exercise Retry and the error boundary. Never set it outside tests. |
-| `TEST_DATABASE_URL`    | no, test only                 | `postgres://postgres:postgres@localhost:5433/firefly_notes_test` | Database Vitest uses, created for you; never the development one.       |
-| `RUN_LIVE`             | no, test only                 | `0`                              | `1` (with `ANTHROPIC_API_KEY`) also runs the live Claude smoke tests, which call the real API.       |
+| Variable               | Required                  | Default         | What it does                                                                                                                                                                                                |
+| ---------------------- | ------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | yes                       |                 | Postgres connection string. Migrations and the seeder use it too.                                                                                                                                           |
+| `AI_PROVIDER`          | no                        | `claude`        | `claude` has Claude write Transcripts and Summaries; `fake` is deterministic and instant. Under `NODE_ENV=test` the default is `fake`.                                                                     |
+| `ANTHROPIC_API_KEY`    | when `AI_PROVIDER=claude` |                 | Anthropic API key. The server refuses to start without it when the provider is `claude`.                                                                                                                    |
+| `AI_MODEL`             | no                        | `claude-opus-5` | Claude model id used by the `claude` provider.                                                                                                                                                              |
+| `MAX_MEETINGS_PER_DAY` | no                        | `50`            | Global cap on non-sample Meetings created in any rolling 24 hours (ADR-0005).                                                                                                                                |
+| `PORT`                 | no                        | `3000`          | Port the server listens on. The Docker image honours it.                                                                                                                                                    |
+| `E2E_FAULT_INJECTION`  | no, test only             | `0`             | `1` lets a Meeting title carry `[fail:transcribing]` or `[fail:summarizing]` to fail that step once, and a list search of `[fail:page]` throw on the list page, so e2e can exercise Retry and the error boundary. Never set it outside tests. |
+| `TEST_DATABASE_URL`    | no, test only             | see `.env.example` | Database Vitest uses (`firefly_notes_test` on the compose Postgres), created for you; never the development one.                                                                                        |
+| `RUN_LIVE`             | no, test only             | `0`             | `1` (with `ANTHROPIC_API_KEY`) also runs the live Claude smoke tests, which call the real API.                                                                                                              |
 
 ## Run
 

@@ -12,13 +12,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 export function ErrorState({
   error,
   retry,
-  title = "Something went wrong",
-  description = "This page could not be loaded. Try again, or go back to your Meetings.",
 }: {
   error: Error & { digest?: string };
   retry: () => void;
-  title?: string;
-  description?: string;
 }) {
   useEffect(() => {
     console.error(error);
@@ -29,9 +25,11 @@ export function ErrorState({
       <span className="bg-destructive/10 text-destructive flex size-12 items-center justify-center rounded-full">
         <AlertCircle aria-hidden="true" className="size-5" />
       </span>
-      <h1 className="mt-5 text-2xl font-semibold tracking-tight">{title}</h1>
+      <h1 className="mt-5 text-2xl font-semibold tracking-tight">
+        Something went wrong
+      </h1>
       <p className="text-muted-foreground mt-2 max-w-sm text-sm leading-6">
-        {description}
+        This page could not be loaded. Try again, or go back to your Meetings.
       </p>
       {error.digest && (
         <p className="text-muted-foreground mt-2 font-mono text-xs">

@@ -3,6 +3,10 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { getEnv } from "@/lib/env";
+import {
+  withSummarizationFaultInjection,
+  withTranscriptionFaultInjection,
+} from "@/lib/fault-injection";
 
 import { createAnthropicStructuredGenerator } from "./anthropic-structured-generator";
 import type { StructuredGenerator } from "./structured-generator";
@@ -10,10 +14,6 @@ import { createLlmSummarizationProvider } from "./llm-summarization-provider";
 import { createLlmTranscriptionProvider } from "./llm-transcription-provider";
 import { createFakeSummarizationProvider } from "./fake-summarization-provider";
 import { createFakeTranscriptionProvider } from "./fake-transcription-provider";
-import {
-  withSummarizationFaultInjection,
-  withTranscriptionFaultInjection,
-} from "./fault-injection";
 import type { SummarizationProvider } from "./summarization-provider";
 import type { TranscriptionProvider } from "./transcription-provider";
 

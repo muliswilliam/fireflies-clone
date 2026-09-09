@@ -1,14 +1,14 @@
 import { Mic, Plus, Search } from "lucide-react";
 import Link from "next/link";
 
-import { MeetingLinkHint } from "@/components/meetings/meeting-link-hint";
+import { LinkPendingSpinner } from "@/components/link-pending-spinner";
 import { MeetingMeta } from "@/components/meetings/meeting-meta";
 import { SampleBadge } from "@/components/meetings/sample-badge";
 import { StatusBadge } from "@/components/meetings/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { throwIfPageFaultRequested } from "@/lib/ai/fault-injection";
 import { getEnv } from "@/lib/env";
+import { throwIfPageFaultRequested } from "@/lib/fault-injection";
 import { getMeetingService, type MeetingListItem } from "@/lib/meetings";
 
 export const dynamic = "force-dynamic";
@@ -80,7 +80,7 @@ function MeetingRow({ meeting }: { meeting: MeetingListItem }) {
           />
         </div>
         <span className="flex shrink-0 items-center gap-3">
-          <MeetingLinkHint />
+          <LinkPendingSpinner />
           <StatusBadge status={meeting.status} />
         </span>
       </Link>
